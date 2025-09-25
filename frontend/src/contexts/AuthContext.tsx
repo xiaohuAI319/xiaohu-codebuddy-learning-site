@@ -52,7 +52,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         return;
       }
 
-      const response = await fetch('/api/auth/me', {
+      const response = await fetch('http://localhost:5000/api/auth/me', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -60,8 +60,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (response.ok) {
         const data = await response.json();
-        if (data.success) {
-          setUser(data.data);
+        if (data.user) {
+          setUser(data.user);
         } else {
           localStorage.removeItem('token');
         }
@@ -78,22 +78,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
-      const response = await fetch('/api/auth/login', {
+      const response = await fetch('http://localhost:5000/api/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify({ username: email, password })
       });
 
       const data = await response.json();
       
-      if (data.success) {
+      if (response.ok && data.token) {
         localStorage.setItem('token', data.token);
         setUser(data.user);
         return true;
       } else {
-        console.error('登录失败:', data.message);
+        console.error('登录失败:', data.error || data.message);
         return false;
       }
     } catch (error) {
@@ -104,22 +104,25 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const register = async (nickname: string, email: string, password: string): Promise<boolean> => {
     try {
-      const response = await fetch('/api/auth/register', {
+      // 生成用户名（使用邮箱前缀）
+      const username = email.split('@')[0];
+      
+      const response = await fetch('http://localhost:5000/api/auth/register', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ nickname, email, password })
+        body: JSON.stringify({ username, email, password, nickname })
       });
 
       const data = await response.json();
       
-      if (data.success) {
+      if (response.ok && data.token) {
         localStorage.setItem('token', data.token);
         setUser(data.user);
         return true;
       } else {
-        console.error('注册失败:', data.message);
+        console.error('注册失败:', data.error || data.message);
         return false;
       }
     } catch (error) {
