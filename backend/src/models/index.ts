@@ -1,5 +1,6 @@
 import sequelize from '../config/database';
 import User from './User';
+import Work from './Work';
 import MembershipTier from './MembershipTier';
 import Bootcamp from './Bootcamp';
 import Coupon from './Coupon';
@@ -36,10 +37,22 @@ Coupon.belongsTo(User, {
   as: 'creator' 
 });
 
+// Work和User关联
+Work.belongsTo(User, {
+  foreignKey: 'author',
+  as: 'authorUser'
+});
+
+User.hasMany(Work, {
+  foreignKey: 'author',
+  as: 'works'
+});
+
 // 导出所有模型和数据库连接
 export {
   sequelize,
   User,
+  Work,
   MembershipTier,
   Bootcamp,
   Coupon,

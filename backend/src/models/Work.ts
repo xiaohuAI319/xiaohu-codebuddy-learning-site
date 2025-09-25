@@ -1,4 +1,4 @@
-import { DataTypes, Model, Optional } from 'sequelize';
+  import { DataTypes, Model, Optional } from 'sequelize';
 import sequelize from '../config/database';
 
 // Work属性接口
@@ -10,17 +10,13 @@ export interface WorkAttributes {
   htmlFile?: string;
   link?: string;
   category: 'web' | 'mobile' | 'desktop' | 'ai' | 'other';
+  tags?: string;              // 标签，逗号分隔
+  repositoryUrl?: string;     // 源码仓库链接，会员级别及以上可见
   bootcamp?: string;
   author: number;
   votes: number;
   isPinned: boolean;
   visibility: 'public' | 'private';
-  // 分层内容字段
-  previewContent?: string;    // 所有人可见的预览内容
-  basicContent?: string;      // 学员及以上可见的基础内容
-  advancedContent?: string;   // 会员及以上可见的高级内容
-  premiumContent?: string;    // 高级会员及以上可见的高端内容
-  sourceCode?: string;        // 源码内容，根据等级控制显示
   createdAt: Date;
   updatedAt: Date;
 }
@@ -37,17 +33,13 @@ class Work extends Model<WorkAttributes, WorkCreationAttributes> implements Work
   public htmlFile?: string;
   public link?: string;
   public category!: 'web' | 'mobile' | 'desktop' | 'ai' | 'other';
+  public tags?: string;
+  public repositoryUrl?: string;
   public bootcamp?: string;
   public author!: number;
   public votes!: number;
   public isPinned!: boolean;
   public visibility!: 'public' | 'private';
-  // 分层内容字段
-  public previewContent?: string;
-  public basicContent?: string;
-  public advancedContent?: string;
-  public premiumContent?: string;
-  public sourceCode?: string;
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 
@@ -102,6 +94,19 @@ Work.init(
       allowNull: false,
       defaultValue: 'other',
     },
+    tags: {
+      type: DataTypes.STRING(500),
+      allowNull: true,
+      comment: '标签，逗号分隔',
+    },
+    repositoryUrl: {
+      type: DataTypes.STRING(500),
+      allowNull: true,
+      validate: {
+        isUrl: true,
+      },
+      comment: '源码仓库链接，会员级别及以上可见',
+    },
     bootcamp: {
       type: DataTypes.STRING(100),
       allowNull: true,
@@ -131,32 +136,6 @@ Work.init(
       type: DataTypes.ENUM('public', 'private'),
       allowNull: false,
       defaultValue: 'public',
-    },
-    // 分层内容字段
-    previewContent: {
-      type: DataTypes.TEXT,
-      allowNull: true,
-      comment: '所有人可见的预览内容',
-    },
-    basicContent: {
-      type: DataTypes.TEXT,
-      allowNull: true,
-      comment: '学员及以上可见的基础内容',
-    },
-    advancedContent: {
-      type: DataTypes.TEXT,
-      allowNull: true,
-      comment: '会员及以上可见的高级内容',
-    },
-    premiumContent: {
-      type: DataTypes.TEXT,
-      allowNull: true,
-      comment: '高级会员及以上可见的高端内容',
-    },
-    sourceCode: {
-      type: DataTypes.TEXT,
-      allowNull: true,
-      comment: '源码内容，根据用户等级控制显示',
     },
     createdAt: {
       type: DataTypes.DATE,

@@ -191,7 +191,9 @@ router.post('/', [
   body('title').trim().isLength({ min: 1, max: 100 }).withMessage('标题长度必须在1-100字符之间'),
   body('description').trim().isLength({ min: 1, max: 500 }).withMessage('描述长度必须在1-500字符之间'),
   body('category').isIn(['web', 'mobile', 'desktop', 'ai', 'other']).withMessage('无效的分类'),
-  body('visibility').isIn(['public', 'private']).withMessage('无效的可见性设置')
+  body('visibility').isIn(['public', 'private']).withMessage('无效的可见性设置'),
+  body('tags').optional().isLength({ max: 500 }).withMessage('标签长度不能超过500字符'),
+  body('repositoryUrl').optional().isURL().withMessage('源码仓库链接格式不正确')
 ], async (req: AuthRequest, res: express.Response): Promise<void> => {
   try {
     const errors = validationResult(req);
@@ -207,31 +209,45 @@ router.post('/', [
       return;
     }
 
-    if (!req.body.workUrl && (!files.htmlFile || files.htmlFile.length === 0)) {
+    if (!req.body.link && (!files.htmlFile || files.htmlFile.length === 0)) {
       res.status(400).json({ error: '必须提供作品链接或上传HTML文件' });
       return;
+    }
+
+    // 检查源码仓库链接权限
+    if (req.body.repositoryUrl) {
+      const user = await User.findByPk(req.user!.userId, {
+        include: [{ model: MembershipTier, as: 'membershipTier' }]
+      });
+      
+      if (!user) {
+        res.status(404).json({ error: '用户不存在' });
+        return;
+      }
+
+      const userLevel = getUserLevelValue(user.currentLevel, true);
+      if (userLevel < 2) { // 会员级别以下不能上传源码链接
+        res.status(403).json({ error: '只有会员级别及以上用户才能上传源码仓库链接' });
+        return;
+      }
     }
 
     const workData: any = {
       title: req.body.title,
       description: req.body.description,
       category: req.body.category,
+      tags: req.body.tags || null,
+      repositoryUrl: req.body.repositoryUrl || null,
       bootcamp: req.body.bootcamp || null,
       visibility: req.body.visibility || 'public',
       coverImage: files.coverImage[0].path,
       author: req.user!.userId,
       votes: 0,
-      isPinned: false,
-      // 分层内容
-      previewContent: req.body.previewContent || null,
-      basicContent: req.body.basicContent || null,
-      advancedContent: req.body.advancedContent || null,
-      premiumContent: req.body.premiumContent || null,
-      sourceCode: req.body.sourceCode || null
+      isPinned: false
     };
 
-    if (req.body.workUrl) {
-      workData.link = req.body.workUrl;
+    if (req.body.link) {
+      workData.link = req.body.link;
     }
 
     if (files.htmlFile && files.htmlFile.length > 0) {
@@ -267,7 +283,9 @@ router.put('/:id', [
   body('title').optional().trim().isLength({ min: 1, max: 100 }).withMessage('标题长度必须在1-100字符之间'),
   body('description').optional().trim().isLength({ min: 1, max: 500 }).withMessage('描述长度必须在1-500字符之间'),
   body('category').optional().isIn(['web', 'mobile', 'desktop', 'ai', 'other']).withMessage('无效的分类'),
-  body('visibility').optional().isIn(['public', 'private']).withMessage('无效的可见性设置')
+  body('visibility').optional().isIn(['public', 'private']).withMessage('无效的可见性设置'),
+  body('tags').optional().isLength({ max: 500 }).withMessage('标签长度不能超过500字符'),
+  body('repositoryUrl').optional().isURL().withMessage('源码仓库链接格式不正确')
 ], async (req: AuthRequest, res: express.Response): Promise<void> => {
   try {
     const errors = validationResult(req);
@@ -288,6 +306,24 @@ router.put('/:id', [
       return;
     }
 
+    // 检查源码仓库链接权限
+    if (req.body.repositoryUrl !== undefined) {
+      const user = await User.findByPk(req.user!.userId, {
+        include: [{ model: MembershipTier, as: 'membershipTier' }]
+      });
+      
+      if (!user) {
+        res.status(404).json({ error: '用户不存在' });
+        return;
+      }
+
+      const userLevel = getUserLevelValue(user.currentLevel, true);
+      if (userLevel < 2 && req.body.repositoryUrl) { // 会员级别以下不能设置源码链接
+        res.status(403).json({ error: '只有会员级别及以上用户才能设置源码仓库链接' });
+        return;
+      }
+    }
+
     const files = req.files as { [fieldname: string]: Express.Multer.File[] };
     const updateData: any = {};
 
@@ -295,6 +331,8 @@ router.put('/:id', [
     if (req.body.title) updateData.title = req.body.title;
     if (req.body.description) updateData.description = req.body.description;
     if (req.body.category) updateData.category = req.body.category;
+    if (req.body.tags !== undefined) updateData.tags = req.body.tags;
+    if (req.body.repositoryUrl !== undefined) updateData.repositoryUrl = req.body.repositoryUrl;
     if (req.body.bootcamp !== undefined) updateData.bootcamp = req.body.bootcamp;
     if (req.body.visibility) updateData.visibility = req.body.visibility;
     if (req.body.link) updateData.link = req.body.link;

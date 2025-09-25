@@ -47,45 +47,22 @@ export function filterWorkContent(work: any, userLevel: UserLevel, isAdmin: bool
     description: work.description,
     coverImage: work.coverImage,
     category: work.category,
+    tags: work.tags,
     bootcamp: work.bootcamp,
     votes: work.votes,
     isPinned: work.isPinned,
     visibility: work.visibility,
     createdAt: work.createdAt,
+    updatedAt: work.updatedAt,
     author: work.author,
-    // 基础内容
+    // 基础内容 - 所有人都可以看到
     link: work.link,
     htmlFile: work.htmlFile
   };
 
-  // 根据用户等级添加相应内容
-  
-  // 所有人都可以看到预览内容
-  if (work.previewContent) {
-    filteredWork.previewContent = work.previewContent;
-  }
-
-  // 学员及以上可以看到基础内容
-  if (userLevel >= UserLevel.STUDENT && work.basicContent) {
-    filteredWork.basicContent = work.basicContent;
-  }
-
-  // 会员及以上可以看到高级内容
-  if (userLevel >= UserLevel.MEMBER && work.advancedContent) {
-    filteredWork.advancedContent = work.advancedContent;
-  }
-
-  // 高级会员及以上可以看到高端内容
-  if (userLevel >= UserLevel.ADVANCED && work.premiumContent) {
-    filteredWork.premiumContent = work.premiumContent;
-  }
-
-  // 源码显示控制：会员级别不显示源码，其他级别可以显示
-  if (userLevel !== UserLevel.MEMBER && work.sourceCode) {
-    // 学员、高级会员、共创、讲师可以看到源码
-    if (userLevel === UserLevel.STUDENT || userLevel >= UserLevel.ADVANCED) {
-      filteredWork.sourceCode = work.sourceCode;
-    }
+  // 源码仓库链接权限控制：只有会员级别及以上可以看到
+  if (userLevel >= UserLevel.MEMBER && work.repositoryUrl) {
+    filteredWork.repositoryUrl = work.repositoryUrl;
   }
 
   return filteredWork;

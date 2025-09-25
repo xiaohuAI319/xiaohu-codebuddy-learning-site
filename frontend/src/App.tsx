@@ -8,6 +8,9 @@ import UploadPage from './pages/UploadPage';
 import AdminPage from './pages/AdminPage';
 import MembershipPage from './pages/MembershipPage';
 import AdminMembershipPage from './pages/AdminMembershipPage';
+import AdminDashboard from './pages/AdminDashboard';
+import AdminUsersPage from './pages/AdminUsersPage';
+import AdminWorksPage from './pages/AdminWorksPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -40,6 +43,21 @@ function App() {
               <Route path="admin" element={
                 <ProtectedRoute requiredRole="admin">
                   <AdminPage />
+                </ProtectedRoute>
+              } />
+              <Route path="admin/dashboard" element={
+                <ProtectedRoute requiredRole="admin">
+                  <AdminDashboard />
+                </ProtectedRoute>
+              } />
+              <Route path="admin/users" element={
+                <ProtectedRoute requiredRole="admin">
+                  <AdminUsersPage />
+                </ProtectedRoute>
+              } />
+              <Route path="admin/works" element={
+                <ProtectedRoute requiredRole="admin">
+                  <AdminWorksPage />
                 </ProtectedRoute>
               } />
               <Route path="admin/membership" element={

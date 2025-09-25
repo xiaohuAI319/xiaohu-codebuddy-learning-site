@@ -16,7 +16,7 @@ import workRoutes from './routes/works';
 import categoryRoutes from './routes/categories';
 import uploadRoutes from './routes/upload';
 import membershipRoutes from './routes/membership';
-// import adminRoutes from './routes/admin'; // 已删除
+import adminRoutes from './routes/admin';
 
 // 加载环境变量
 dotenv.config();
@@ -28,8 +28,17 @@ const PORT = process.env.PORT || 5000;
 app.use(helmet());
 
 // CORS配置
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:3001'
+];
+
+if (process.env.FRONTEND_URL) {
+  allowedOrigins.push(process.env.FRONTEND_URL);
+}
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: allowedOrigins,
   credentials: true
 }));
 
@@ -57,7 +66,7 @@ app.use('/api/works', workRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/membership', membershipRoutes);
-// app.use('/api/admin', adminRoutes); // 已删除
+app.use('/api/admin', adminRoutes);
 
 // 健康检查
 app.get('/api/health', (req, res) => {
