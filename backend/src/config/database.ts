@@ -1,16 +1,16 @@
-import mongoose from 'mongoose';
+import { Sequelize } from 'sequelize';
+import path from 'path';
 
-const connectDB = async () => {
-  try {
-    const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/codebuddy-learning';
-    
-    await mongoose.connect(mongoURI);
-    
-    console.log('MongoDB 连接成功');
-  } catch (error) {
-    console.error('MongoDB 连接失败:', error);
-    process.exit(1);
+// 创建SQLite数据库连接
+const sequelize = new Sequelize({
+  dialect: 'sqlite',
+  storage: path.join(__dirname, '../../database/xiaohu-codebuddy.db'),
+  logging: process.env.NODE_ENV === 'development' ? console.log : false,
+  define: {
+    timestamps: true,
+    underscored: false,
+    freezeTableName: true
   }
-};
+});
 
-export default connectDB;
+export default sequelize;

@@ -1,137 +1,162 @@
-import mongoose, { Document, Schema } from 'mongoose';
+import { DataTypes, Model, Optional } from 'sequelize';
+import sequelize from '../config/database';
 
-export interface ICoupon extends Document {
+export interface ICoupon {
+  id: number;
   code: string;
   name: string;
   description: string;
-  discountType: 'percent' | 'fixed';
+  discountType: 'percentage' | 'fixed';
   discountValue: number;
-  minAmount: number;
-  maxDiscount?: number;
+  minPurchaseAmount: number;
+  maxDiscountAmount?: number;
   usageLimit: number;
   usedCount: number;
-  isActive: boolean;
   validFrom: Date;
   validTo: Date;
-  applicableTypes: string[];
-  applicableTiers: mongoose.Types.ObjectId[];
-  createdBy: mongoose.Types.ObjectId;
+  isActive: boolean;
+  applicableTierIds: number[];
+  createdById: number;
   createdAt: Date;
   updatedAt: Date;
 }
 
-const CouponSchema: Schema = new Schema({
+interface CouponCreationAttributes extends Optional<ICoupon, 'id' | 'createdAt' | 'updatedAt'> {}
+
+class Coupon extends Model<ICoupon, CouponCreationAttributes> implements ICoupon {
+  public id!: number;
+  public code!: string;
+  public name!: string;
+  public description!: string;
+  public discountType!: 'percentage' | 'fixed';
+  public discountValue!: number;
+  public minPurchaseAmount!: number;
+  public maxDiscountAmount?: number;
+  public usageLimit!: number;
+  public usedCount!: number;
+  public validFrom!: Date;
+  public validTo!: Date;
+  public isActive!: boolean;
+  public applicableTierIds!: number[];
+  public createdById!: number;
+  
+  public readonly createdAt!: Date;
+  public readonly updatedAt!: Date;
+}
+
+Coupon.init({
+  id: {
+    type: DataTypes.INTEGER,
+    autoIncrement: true,
+    primaryKey: true
+  },
   code: {
-    type: String,
-    required: true,
-    unique: true,
-    uppercase: true,
-    trim: true
+    type: DataTypes.STRING(50),
+    allowNull: false,
+    unique: true
   },
   name: {
-    type: String,
-    required: true,
-    trim: true
+    type: DataTypes.STRING(100),
+    allowNull: false
   },
   description: {
-    type: String,
-    required: true
+    type: DataTypes.TEXT,
+    allowNull: false
   },
   discountType: {
-    type: String,
-    enum: ['percent', 'fixed'],
-    required: true
+    type: DataTypes.ENUM('percentage', 'fixed'),
+    allowNull: false
   },
   discountValue: {
-    type: Number,
-    required: true,
-    min: 0
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: false,
+    validate: {
+      min: 0
+    }
   },
-  minAmount: {
-    type: Number,
-    default: 0,
-    min: 0
+  minPurchaseAmount: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: false,
+    defaultValue: 0,
+    validate: {
+      min: 0
+    }
   },
-  maxDiscount: {
-    type: Number,
-    min: 0
+  maxDiscountAmount: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: true,
+    validate: {
+      min: 0
+    }
   },
   usageLimit: {
-    type: Number,
-    default: 1,
-    min: 1
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    validate: {
+      min: 1
+    }
   },
   usedCount: {
-    type: Number,
-    default: 0,
-    min: 0
-  },
-  isActive: {
-    type: Boolean,
-    default: true
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    defaultValue: 0,
+    validate: {
+      min: 0
+    }
   },
   validFrom: {
-    type: Date,
-    required: true
+    type: DataTypes.DATE,
+    allowNull: false
   },
   validTo: {
-    type: Date,
-    required: true
+    type: DataTypes.DATE,
+    allowNull: false
   },
-  applicableTypes: [{
-    type: String,
-    enum: ['membership', 'course', 'camp']
-  }],
-  applicableTiers: [{
-    type: Schema.Types.ObjectId,
-    ref: 'MembershipTier'
-  }],
-  createdBy: {
-    type: Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
+  isActive: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: true
+  },
+  applicableTierIds: {
+    type: DataTypes.TEXT,
+    allowNull: false,
+    defaultValue: '[]',
+    get() {
+      const value = this.getDataValue('applicableTierIds') as unknown as string;
+      return value ? JSON.parse(value) : [];
+    },
+    set(value: number[]) {
+      this.setDataValue('applicableTierIds', JSON.stringify(value) as any);
+    }
+  },
+  createdById: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: {
+      model: 'users',
+      key: 'id'
+    }
+  },
+  createdAt: {
+    type: DataTypes.DATE,
+    allowNull: false,
+    defaultValue: DataTypes.NOW
+  },
+  updatedAt: {
+    type: DataTypes.DATE,
+    allowNull: false,
+    defaultValue: DataTypes.NOW
   }
 }, {
-  timestamps: true
+  sequelize,
+  modelName: 'Coupon',
+  tableName: 'coupons',
+  indexes: [
+    { fields: ['code'] },
+    { fields: ['isActive'] },
+    { fields: ['validFrom', 'validTo'] },
+    { fields: ['createdById'] }
+  ]
 });
 
-// 索引
-CouponSchema.index({ code: 1 });
-CouponSchema.index({ isActive: 1, validFrom: 1, validTo: 1 });
-CouponSchema.index({ createdBy: 1 });
-
-// 实例方法：检查优惠券是否有效
-CouponSchema.methods.isValid = function() {
-  const now = new Date();
-  return this.isActive && 
-         this.validFrom <= now && 
-         this.validTo >= now && 
-         this.usedCount < this.usageLimit;
-};
-
-// 实例方法：计算折扣金额
-CouponSchema.methods.calculateDiscount = function(amount: number) {
-  if (!this.isValid() || amount < this.minAmount) {
-    return 0;
-  }
-
-  let discount = 0;
-  if (this.discountType === 'percent') {
-    discount = amount * (this.discountValue / 100);
-    if (this.maxDiscount && discount > this.maxDiscount) {
-      discount = this.maxDiscount;
-    }
-  } else {
-    discount = this.discountValue;
-  }
-
-  return Math.min(discount, amount);
-};
-
-// 实例方法：使用优惠券
-CouponSchema.methods.use = function() {
-  this.usedCount += 1;
-  return this.save();
-};
-
-export default mongoose.model<ICoupon>('Coupon', CouponSchema);
+export default Coupon;

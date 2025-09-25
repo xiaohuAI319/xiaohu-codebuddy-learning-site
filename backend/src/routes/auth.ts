@@ -1,6 +1,7 @@
-import express from 'express';
+import express, { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import { body, validationResult } from 'express-validator';
+import { Op } from 'sequelize';
 import User from '../models/User';
 import { auth } from '../middleware/auth';
 
@@ -12,47 +13,58 @@ router.post('/register', [
   body('email').isEmail().normalizeEmail(),
   body('password').isLength({ min: 6 }),
   body('nickname').isLength({ min: 1, max: 50 }).trim()
-], async (req, res) => {
+], async (req: Request, res: Response): Promise<void> => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
+      res.status(400).json({ errors: errors.array() });
+      return;
     }
 
     const { username, email, password, nickname } = req.body;
 
     // 检查用户是否已存在
     const existingUser = await User.findOne({
-      $or: [{ email }, { username }]
+      where: {
+        [Op.or]: [{ email }, { username }]
+      }
     });
 
     if (existingUser) {
-      return res.status(400).json({
+      res.status(400).json({
         error: 'User already exists with this email or username'
       });
+      return;
     }
 
     // 创建新用户
-    const user = new User({
+    const user = await User.create({
       username,
       email,
       password,
-      nickname
+      nickname,
+      role: 'student',
+      joinDate: new Date(),
+      isActive: true,
+      currentLevel: '学员',
+      totalSpent: 0,
+      totalPaid: 0,
+      availableCoupons: [],
+      usedCoupons: [],
+      paymentHistory: []
     });
-
-    await user.save();
 
     // 生成JWT token
     const token = jwt.sign(
-      { userId: user._id },
+      { userId: user.id.toString() },
       process.env.JWT_SECRET || 'fallback-secret',
-      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' } as jwt.SignOptions
     );
 
     res.status(201).json({
       message: 'User registered successfully',
       token,
-      user
+      user: user.toJSON()
     });
   } catch (error) {
     console.error('Registration error:', error);
@@ -64,42 +76,47 @@ router.post('/register', [
 router.post('/login', [
   body('username').notEmpty().trim(),
   body('password').notEmpty()
-], async (req, res) => {
+], async (req: Request, res: Response): Promise<void> => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
+      res.status(400).json({ errors: errors.array() });
+      return;
     }
 
     const { username, password } = req.body;
 
     // 查找用户（支持用户名或邮箱登录）
     const user = await User.findOne({
-      $or: [{ username }, { email: username }],
-      isActive: true
+      where: {
+        [Op.or]: [{ username }, { email: username }],
+        isActive: true
+      }
     });
 
     if (!user) {
-      return res.status(401).json({ error: 'Invalid credentials' });
+      res.status(401).json({ error: 'Invalid credentials' });
+      return;
     }
 
     // 验证密码
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
-      return res.status(401).json({ error: 'Invalid credentials' });
+      res.status(401).json({ error: 'Invalid credentials' });
+      return;
     }
 
     // 生成JWT token
     const token = jwt.sign(
-      { userId: user._id },
+      { userId: user.id.toString() },
       process.env.JWT_SECRET || 'fallback-secret',
-      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' } as jwt.SignOptions
     );
 
     res.json({
       message: 'Login successful',
       token,
-      user
+      user: user.toJSON()
     });
   } catch (error) {
     console.error('Login error:', error);
@@ -108,14 +125,15 @@ router.post('/login', [
 });
 
 // 获取当前用户信息
-router.get('/me', auth, async (req, res) => {
+router.get('/me', auth, async (req: any, res: Response): Promise<void> => {
   try {
-    const user = await User.findById(req.user.userId);
+    const user = await User.findByPk(req.user.userId);
     if (!user) {
-      return res.status(404).json({ error: 'User not found' });
+      res.status(404).json({ error: 'User not found' });
+      return;
     }
 
-    res.json({ user });
+    res.json({ user: user.toJSON() });
   } catch (error) {
     console.error('Get user error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -123,24 +141,25 @@ router.get('/me', auth, async (req, res) => {
 });
 
 // 刷新token
-router.post('/refresh', auth, async (req, res) => {
+router.post('/refresh', auth, async (req: any, res: Response): Promise<void> => {
   try {
-    const user = await User.findById(req.user.userId);
+    const user = await User.findByPk(req.user.userId);
     if (!user) {
-      return res.status(404).json({ error: 'User not found' });
+      res.status(404).json({ error: 'User not found' });
+      return;
     }
 
     // 生成新的JWT token
     const token = jwt.sign(
-      { userId: user._id },
+      { userId: user.id.toString() },
       process.env.JWT_SECRET || 'fallback-secret',
-      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' } as jwt.SignOptions
     );
 
     res.json({
       message: 'Token refreshed successfully',
       token,
-      user
+      user: user.toJSON()
     });
   } catch (error) {
     console.error('Token refresh error:', error);

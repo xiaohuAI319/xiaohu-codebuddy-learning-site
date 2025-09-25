@@ -1,115 +1,116 @@
-import mongoose, { Document, Schema } from 'mongoose';
+import { DataTypes, Model, Optional } from 'sequelize';
+import sequelize from '../config/database';
 
-export interface ISerialCode extends Document {
+export interface ISerialCode {
+  id: number;
   code: string;
-  name: string;
-  description: string;
-  type: 'membership' | 'course' | 'camp';
-  targetId: mongoose.Types.ObjectId;
-  value: number;
+  membershipTierId: number;
   isUsed: boolean;
-  usedBy?: mongoose.Types.ObjectId;
+  usedById?: number;
   usedAt?: Date;
-  expiresAt?: Date;
-  isActive: boolean;
-  createdBy: mongoose.Types.ObjectId;
+  validFrom: Date;
+  validTo: Date;
+  batchId: string;
+  createdById: number;
   createdAt: Date;
   updatedAt: Date;
 }
 
-const SerialCodeSchema: Schema = new Schema({
+interface SerialCodeCreationAttributes extends Optional<ISerialCode, 'id' | 'createdAt' | 'updatedAt'> {}
+
+class SerialCode extends Model<ISerialCode, SerialCodeCreationAttributes> implements ISerialCode {
+  public id!: number;
+  public code!: string;
+  public membershipTierId!: number;
+  public isUsed!: boolean;
+  public usedById?: number;
+  public usedAt?: Date;
+  public validFrom!: Date;
+  public validTo!: Date;
+  public batchId!: string;
+  public createdById!: number;
+  
+  public readonly createdAt!: Date;
+  public readonly updatedAt!: Date;
+}
+
+SerialCode.init({
+  id: {
+    type: DataTypes.INTEGER,
+    autoIncrement: true,
+    primaryKey: true
+  },
   code: {
-    type: String,
-    required: true,
-    unique: true,
-    uppercase: true,
-    trim: true
+    type: DataTypes.STRING(100),
+    allowNull: false,
+    unique: true
   },
-  name: {
-    type: String,
-    required: true,
-    trim: true
-  },
-  description: {
-    type: String,
-    required: true
-  },
-  type: {
-    type: String,
-    enum: ['membership', 'course', 'camp'],
-    required: true
-  },
-  targetId: {
-    type: Schema.Types.ObjectId,
-    required: true,
-    refPath: 'type'
-  },
-  value: {
-    type: Number,
-    required: true,
-    min: 0
+  membershipTierId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: {
+      model: 'membership_tiers',
+      key: 'id'
+    }
   },
   isUsed: {
-    type: Boolean,
-    default: false
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: false
   },
-  usedBy: {
-    type: Schema.Types.ObjectId,
-    ref: 'User'
+  usedById: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    references: {
+      model: 'users',
+      key: 'id'
+    }
   },
   usedAt: {
-    type: Date
+    type: DataTypes.DATE,
+    allowNull: true
   },
-  expiresAt: {
-    type: Date
+  validFrom: {
+    type: DataTypes.DATE,
+    allowNull: false
   },
-  isActive: {
-    type: Boolean,
-    default: true
+  validTo: {
+    type: DataTypes.DATE,
+    allowNull: false
   },
-  createdBy: {
-    type: Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
+  batchId: {
+    type: DataTypes.STRING(100),
+    allowNull: false
+  },
+  createdById: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: {
+      model: 'users',
+      key: 'id'
+    }
+  },
+  createdAt: {
+    type: DataTypes.DATE,
+    allowNull: false,
+    defaultValue: DataTypes.NOW
+  },
+  updatedAt: {
+    type: DataTypes.DATE,
+    allowNull: false,
+    defaultValue: DataTypes.NOW
   }
 }, {
-  timestamps: true
+  sequelize,
+  modelName: 'SerialCode',
+  tableName: 'serial_codes',
+  indexes: [
+    { fields: ['code'] },
+    { fields: ['isUsed'] },
+    { fields: ['membershipTierId'] },
+    { fields: ['batchId'] },
+    { fields: ['createdById'] }
+  ]
 });
 
-// 索引
-SerialCodeSchema.index({ code: 1 });
-SerialCodeSchema.index({ type: 1, isUsed: 1, isActive: 1 });
-SerialCodeSchema.index({ usedBy: 1 });
-SerialCodeSchema.index({ expiresAt: 1 });
-
-// 实例方法：检查序列号是否有效
-SerialCodeSchema.methods.isValid = function() {
-  const now = new Date();
-  return this.isActive && 
-         !this.isUsed && 
-         (!this.expiresAt || this.expiresAt > now);
-};
-
-// 实例方法：使用序列号
-SerialCodeSchema.methods.use = function(userId: mongoose.Types.ObjectId) {
-  if (!this.isValid()) {
-    throw new Error('Serial code is not valid');
-  }
-  
-  this.isUsed = true;
-  this.usedBy = userId;
-  this.usedAt = new Date();
-  return this.save();
-};
-
-// 静态方法：生成序列号
-SerialCodeSchema.statics.generateCode = function() {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let result = '';
-  for (let i = 0; i < 12; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return result;
-};
-
-export default mongoose.model<ISerialCode>('SerialCode', SerialCodeSchema);
+export default SerialCode;

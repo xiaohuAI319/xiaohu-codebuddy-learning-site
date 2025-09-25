@@ -1,558 +1,575 @@
 import express from 'express';
-import { auth, requireRole } from '../middleware/auth';
-import { checkMembershipPermission } from '../middleware/membership';
-import MembershipTier from '../models/MembershipTier';
+import { body, validationResult } from 'express-validator';
+import { auth, AuthRequest } from '../middleware/auth';
 import User from '../models/User';
-import Payment from '../models/Payment';
+import MembershipTier from '../models/MembershipTier';
 import Coupon from '../models/Coupon';
 import SerialCode from '../models/SerialCode';
 
 const router = express.Router();
 
-// 获取所有会员等级（公开）
-router.get('/tiers', async (req, res) => {
+// 获取所有会员等级
+router.get('/tiers', async (req: express.Request, res: express.Response): Promise<void> => {
   try {
-    const tiers = await MembershipTier.find({ isActive: true }).sort({ order: 1 });
-    res.json({
-      success: true,
-      data: tiers
+    const tiers = await MembershipTier.findAll({
+      where: { isActive: true },
+      order: [['order', 'ASC']]
     });
+
+    res.json({ tiers });
   } catch (error) {
-    console.error('获取会员等级失败:', error);
-    res.status(500).json({
-      success: false,
-      message: '获取会员等级失败'
-    });
+    console.error('Get membership tiers error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// 获取用户会员信息
-router.get('/my-membership', auth, async (req, res) => {
+// 获取我的会员信息
+router.get('/my-membership', auth, async (req: AuthRequest, res: express.Response): Promise<void> => {
   try {
-    const user = await User.findById(req.user.id)
-      .populate('membershipTier')
-      .populate('availableCoupons');
-    
+    const user = await User.findByPk(req.user!.userId, {
+      include: [{ model: MembershipTier, as: 'membershipTier' }]
+    });
+
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: '用户不存在'
-      });
+      res.status(404).json({ error: 'User not found' });
+      return;
     }
 
     res.json({
-      success: true,
-      data: {
-        currentLevel: user.currentLevel,
-        membershipTier: user.membershipTier,
-        totalSpent: user.totalSpent,
-        availableCoupons: user.availableCoupons,
-        paymentHistory: user.paymentHistory.slice(-10) // 最近10条记录
-      }
+      currentLevel: user.currentLevel,
+      totalSpent: user.totalSpent,
+      totalPaid: user.totalPaid,
+      membershipTier: user.membershipTierId,
+      availableCoupons: user.availableCoupons,
+      usedCoupons: user.usedCoupons
     });
   } catch (error) {
-    console.error('获取用户会员信息失败:', error);
-    res.status(500).json({
-      success: false,
-      message: '获取用户会员信息失败'
-    });
+    console.error('Get my membership error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// 计算升级价格
-router.post('/calculate-upgrade', auth, async (req, res) => {
+// 计算升级费用
+router.post('/calculate-upgrade', auth, [
+  body('targetTierId').isInt().withMessage('Target tier ID must be an integer')
+], async (req: AuthRequest, res: express.Response): Promise<void> => {
   try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.status(400).json({ errors: errors.array() });
+      return;
+    }
+
     const { targetTierId, couponCode } = req.body;
-    
-    const user = await User.findById(req.user.id).populate('membershipTier');
-    const targetTier = await MembershipTier.findById(targetTierId);
-    
+
+    const user = await User.findByPk(req.user!.userId, {
+      include: [{ model: MembershipTier, as: 'membershipTier' }]
+    });
+    const targetTier = await MembershipTier.findByPk(targetTierId);
+
     if (!user || !targetTier) {
-      return res.status(404).json({
-        success: false,
-        message: '用户或目标等级不存在'
-      });
+      res.status(404).json({ error: 'User or target tier not found' });
+      return;
     }
 
-    // 检查是否可以升级到目标等级
-    const currentTierOrder = user.membershipTier?.order || 0;
-    if (targetTier.order <= currentTierOrder) {
-      return res.status(400).json({
-        success: false,
-        message: '无法降级或升级到相同等级'
-      });
-    }
+    // 计算所需金额
+    const currentSpent = user.totalSpent || 0;
+    const requiredAmount = Math.max(0, targetTier.priceRangeMin - currentSpent);
 
-    // 计算需要支付的金额（目标等级最低金额 - 用户已支付金额）
-    let requiredAmount = Math.max(0, targetTier.minAmount - user.totalSpent);
+    let finalAmount = requiredAmount;
     let discount = 0;
     let coupon = null;
 
-    // 应用优惠券
+    // 如果有优惠券，计算折扣
     if (couponCode) {
-      coupon = await Coupon.findOne({ 
-        code: couponCode, 
-        isActive: true,
-        validFrom: { $lte: new Date() },
-        validTo: { $gte: new Date() },
-        usedCount: { $lt: '$usageLimit' }
+      coupon = await Coupon.findOne({
+        where: {
+          code: couponCode,
+          isActive: true
+        }
       });
 
-      if (coupon && requiredAmount >= coupon.minAmount) {
-        if (coupon.discountType === 'percent') {
-          discount = requiredAmount * (coupon.discountValue / 100);
+      if (coupon && requiredAmount >= coupon.minPurchaseAmount) {
+        if (coupon.discountType === 'percentage') {
+          discount = Math.min(requiredAmount * (coupon.discountValue / 100), coupon.maxDiscountAmount || Infinity);
         } else {
-          discount = coupon.discountValue;
+          discount = Math.min(coupon.discountValue, requiredAmount);
         }
-        discount = Math.min(discount, requiredAmount);
+        finalAmount = requiredAmount - discount;
       }
     }
 
-    const finalAmount = requiredAmount - discount;
-
     res.json({
-      success: true,
-      data: {
-        targetTier,
-        requiredAmount,
-        discount,
-        finalAmount,
-        coupon: coupon ? {
-          code: coupon.code,
-          name: coupon.name,
-          discountType: coupon.discountType,
-          discountValue: coupon.discountValue
-        } : null
-      }
+      currentLevel: user.currentLevel,
+      targetLevel: targetTier.name,
+      currentSpent,
+      requiredAmount,
+      discount,
+      finalAmount,
+      coupon: coupon ? {
+        code: coupon.code,
+        description: coupon.description,
+        discountType: coupon.discountType,
+        discountValue: coupon.discountValue
+      } : null
     });
   } catch (error) {
-    console.error('计算升级价格失败:', error);
-    res.status(500).json({
-      success: false,
-      message: '计算升级价格失败'
-    });
+    console.error('Calculate upgrade error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// 处理会员升级支付
-router.post('/upgrade', auth, async (req, res) => {
+// 升级会员等级
+router.post('/upgrade', auth, [
+  body('targetTierId').isInt().withMessage('Target tier ID must be an integer'),
+  body('amount').isFloat({ min: 0 }).withMessage('Amount must be a positive number')
+], async (req: AuthRequest, res: express.Response): Promise<void> => {
   try {
-    const { targetTierId, couponCode, paymentMethod } = req.body;
-    
-    const user = await User.findById(req.user.id).populate('membershipTier');
-    const targetTier = await MembershipTier.findById(targetTierId);
-    
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.status(400).json({ errors: errors.array() });
+      return;
+    }
+
+    const { targetTierId, amount, couponCode, paymentMethod = 'online' } = req.body;
+
+    const user = await User.findByPk(req.user!.userId, {
+      include: [{ model: MembershipTier, as: 'membershipTier' }]
+    });
+    const targetTier = await MembershipTier.findByPk(targetTierId);
+
     if (!user || !targetTier) {
-      return res.status(404).json({
-        success: false,
-        message: '用户或目标等级不存在'
-      });
+      res.status(404).json({ error: 'User or target tier not found' });
+      return;
     }
 
-    // 重新计算价格
-    const currentTierOrder = user.membershipTier?.order || 0;
-    if (targetTier.order <= currentTierOrder) {
-      return res.status(400).json({
-        success: false,
-        message: '无法降级或升级到相同等级'
-      });
+    // 验证升级条件
+    const currentSpent = user.totalSpent || 0;
+    const requiredAmount = Math.max(0, targetTier.priceRangeMin - currentSpent);
+
+    if (amount < requiredAmount) {
+      res.status(400).json({ error: 'Insufficient payment amount' });
+      return;
     }
 
-    let requiredAmount = Math.max(0, targetTier.minAmount - user.totalSpent);
+    let finalAmount = amount;
     let discount = 0;
     let coupon = null;
 
+    // 处理优惠券
     if (couponCode) {
-      coupon = await Coupon.findOne({ 
-        code: couponCode, 
-        isActive: true,
-        validFrom: { $lte: new Date() },
-        validTo: { $gte: new Date() },
-        usedCount: { $lt: '$usageLimit' }
+      coupon = await Coupon.findOne({
+        where: {
+          code: couponCode,
+          isActive: true
+        }
       });
 
-      if (coupon && requiredAmount >= coupon.minAmount) {
-        if (coupon.discountType === 'percent') {
-          discount = requiredAmount * (coupon.discountValue / 100);
+      if (coupon && amount >= coupon.minPurchaseAmount) {
+        if (coupon.discountType === 'percentage') {
+          discount = Math.min(amount * (coupon.discountValue / 100), coupon.maxDiscountAmount || Infinity);
         } else {
-          discount = coupon.discountValue;
+          discount = Math.min(coupon.discountValue, amount);
         }
-        discount = Math.min(discount, requiredAmount);
+        finalAmount = amount - discount;
       }
     }
-
-    const finalAmount = requiredAmount - discount;
-
-    // 创建支付记录
-    const payment = new Payment({
-      user: user._id,
-      amount: finalAmount,
-      originalAmount: requiredAmount,
-      discount,
-      coupon: coupon?._id,
-      type: 'membership_upgrade',
-      targetMembershipTier: targetTier._id,
-      paymentMethod,
-      status: 'completed' // 在实际项目中，这里应该调用支付接口
-    });
-
-    await payment.save();
 
     // 更新用户信息
-    user.totalSpent += finalAmount;
-    user.currentLevel = targetTier.name;
-    user.membershipTier = targetTier._id;
-    user.paymentHistory.push(payment._id);
+    const newTotalSpent = currentSpent + amount;
+    const newTotalPaid = (user.totalPaid || 0) + finalAmount;
 
-    // 移除使用的优惠券
-    if (coupon) {
-      coupon.usedCount += 1;
-      await coupon.save();
-      
-      user.availableCoupons = user.availableCoupons.filter(
-        c => c.toString() !== coupon._id.toString()
-      );
-    }
-
-    await user.save();
+    await user.update({
+      currentLevel: targetTier.name,
+      membershipTierId: targetTier.id,
+      totalSpent: newTotalSpent,
+      totalPaid: newTotalPaid,
+      usedCoupons: coupon ? [...(user.usedCoupons || []), coupon.id] : user.usedCoupons
+    });
 
     res.json({
-      success: true,
-      message: '会员升级成功',
-      data: {
-        newLevel: user.currentLevel,
-        totalSpent: user.totalSpent,
-        payment: payment
-      }
+      message: 'Membership upgraded successfully',
+      newLevel: targetTier.name,
+      totalSpent: newTotalSpent,
+      totalPaid: newTotalPaid,
+      discount,
+      finalAmount
     });
   } catch (error) {
-    console.error('会员升级失败:', error);
-    res.status(500).json({
-      success: false,
-      message: '会员升级失败'
-    });
+    console.error('Upgrade membership error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// 使用序列号激活
-router.post('/activate-serial', auth, async (req, res) => {
+// 激活序列号
+router.post('/activate-serial', auth, [
+  body('serialCode').isLength({ min: 1 }).withMessage('Serial code is required')
+], async (req: AuthRequest, res: express.Response): Promise<void> => {
   try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.status(400).json({ errors: errors.array() });
+      return;
+    }
+
     const { serialCode } = req.body;
-    
-    const user = await User.findById(req.user.id).populate('membershipTier');
-    const serial = await SerialCode.findOne({ 
-      code: serialCode, 
-      isActive: true, 
-      isUsed: false 
+
+    const user = await User.findByPk(req.user!.userId, {
+      include: [{ model: MembershipTier, as: 'membershipTier' }]
     });
-    
+
+    const serial = await SerialCode.findOne({
+      where: {
+        code: serialCode,
+        isUsed: false
+      }
+    });
+
+    if (!user) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
     if (!serial) {
-      return res.status(404).json({
-        success: false,
-        message: '序列号无效或已使用'
-      });
+      res.status(404).json({ error: 'Invalid or already used serial code' });
+      return;
     }
 
     // 检查序列号是否过期
-    if (serial.expiresAt && new Date() > serial.expiresAt) {
-      return res.status(400).json({
-        success: false,
-        message: '序列号已过期'
-      });
+    if (serial.validTo && new Date() > serial.validTo) {
+      res.status(400).json({ error: 'Serial code has expired' });
+      return;
     }
 
-    if (serial.type === 'membership') {
-      // 根据序列号价值确定会员等级
+    // 根据序列号类型处理
+    // SerialCode 直接对应会员等级，不需要type字段
+    if (serial.membershipTierId) {
+      // 找到对应的会员等级
       const targetTier = await MembershipTier.findOne({
-        minAmount: { $lte: serial.value },
-        maxAmount: { $gte: serial.value },
-        isActive: true
-      }).sort({ order: -1 });
+        where: {
+          level: serial.membershipTierId
+        },
+        order: [['order', 'DESC']]
+      });
 
       if (targetTier) {
-        // 创建支付记录
-        const payment = new Payment({
-          user: user._id,
-          amount: serial.value,
-          originalAmount: serial.value,
-          discount: 0,
-          type: 'serial_activation',
-          targetMembershipTier: targetTier._id,
-          serialCode: serial._id,
-          paymentMethod: 'serial_code',
-          status: 'completed'
+        // 更新用户会员等级
+        const tier = await MembershipTier.findByPk(serial.membershipTierId);
+        const newTotalSpent = (user.totalSpent || 0) + (tier?.priceRangeMin || 0);
+        
+        await user.update({
+          currentLevel: targetTier.name,
+          membershipTierId: targetTier.id,
+          totalSpent: newTotalSpent
         });
-
-        await payment.save();
-
-        // 更新用户信息
-        user.totalSpent += serial.value;
-        user.currentLevel = targetTier.name;
-        user.membershipTier = targetTier._id;
-        user.paymentHistory.push(payment._id);
-        await user.save();
 
         // 标记序列号为已使用
-        serial.isUsed = true;
-        serial.usedBy = user._id;
-        serial.usedAt = new Date();
-        await serial.save();
+        await serial.update({
+          isUsed: true,
+          usedById: user.id,
+          usedAt: new Date()
+        });
 
         res.json({
-          success: true,
-          message: '序列号激活成功',
-          data: {
-            newLevel: user.currentLevel,
-            totalSpent: user.totalSpent,
-            activatedValue: serial.value
-          }
+          message: 'Serial code activated successfully',
+          newLevel: targetTier.name,
+          activatedValue: tier?.priceRangeMin || 0
         });
-      } else {
-        res.status(400).json({
-          success: false,
-          message: '无法找到对应的会员等级'
-        });
+        return;
       }
-    } else {
-      res.status(400).json({
-        success: false,
-        message: '该序列号不是会员激活码'
-      });
     }
+
+    res.status(400).json({ error: 'Unable to process serial code' });
   } catch (error) {
-    console.error('序列号激活失败:', error);
-    res.status(500).json({
-      success: false,
-      message: '序列号激活失败'
-    });
+    console.error('Activate serial error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 // 验证优惠券
-router.post('/validate-coupon', auth, async (req, res) => {
+router.post('/validate-coupon', auth, [
+  body('couponCode').isLength({ min: 1 }).withMessage('Coupon code is required'),
+  body('amount').isFloat({ min: 0 }).withMessage('Amount must be a positive number')
+], async (req: AuthRequest, res: express.Response): Promise<void> => {
   try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.status(400).json({ errors: errors.array() });
+      return;
+    }
+
     const { couponCode, amount } = req.body;
-    
-    const coupon = await Coupon.findOne({ 
-      code: couponCode, 
-      isActive: true,
-      validFrom: { $lte: new Date() },
-      validTo: { $gte: new Date() },
-      usedCount: { $lt: '$usageLimit' }
+
+    const coupon = await Coupon.findOne({
+      where: {
+        code: couponCode,
+        isActive: true
+      }
     });
 
     if (!coupon) {
-      return res.status(404).json({
-        success: false,
-        message: '优惠券无效或已过期'
+      res.status(404).json({ 
+        valid: false,
+        message: '优惠券不存在或已失效'
       });
+      return;
     }
 
-    if (amount < coupon.minAmount) {
-      return res.status(400).json({
-        success: false,
-        message: `订单金额需满${coupon.minAmount}元才能使用此优惠券`
+    // 检查最小金额要求
+    if (amount < coupon.minPurchaseAmount) {
+      res.status(400).json({
+        valid: false,
+        message: `订单金额需满${coupon.minPurchaseAmount}元才能使用此优惠券`
       });
+      return;
     }
 
+    // 计算折扣
     let discount = 0;
-    if (coupon.discountType === 'percent') {
-      discount = amount * (coupon.discountValue / 100);
+    if (coupon.discountType === 'percentage') {
+      discount = Math.min(amount * (coupon.discountValue / 100), coupon.maxDiscountAmount || Infinity);
     } else {
-      discount = coupon.discountValue;
+      discount = Math.min(coupon.discountValue, amount);
     }
-    discount = Math.min(discount, amount);
 
     res.json({
-      success: true,
-      data: {
-        coupon: {
-          code: coupon.code,
-          name: coupon.name,
-          discountType: coupon.discountType,
-          discountValue: coupon.discountValue
-        },
-        discount,
-        finalAmount: amount - discount
-      }
+      valid: true,
+      coupon: {
+        code: coupon.code,
+        description: coupon.description,
+        discountType: coupon.discountType,
+        discountValue: coupon.discountValue,
+        minPurchaseAmount: coupon.minPurchaseAmount,
+        maxDiscountAmount: coupon.maxDiscountAmount
+      },
+      discount,
+      finalAmount: amount - discount
     });
   } catch (error) {
-    console.error('验证优惠券失败:', error);
-    res.status(500).json({
-      success: false,
-      message: '验证优惠券失败'
-    });
+    console.error('Validate coupon error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// ===== 管理员接口 =====
-
-// 创建会员等级
-router.post('/admin/tiers', auth, requireRole('admin'), async (req, res) => {
+// 管理员：创建会员等级
+router.post('/admin/tiers', auth, [
+  body('name').isLength({ min: 1, max: 50 }).withMessage('Name is required'),
+  body('level').isInt({ min: 1 }).withMessage('Level must be a positive integer'),
+  body('priceRangeMin').isFloat({ min: 0 }).withMessage('Price range min must be non-negative'),
+  body('priceRangeMax').isFloat({ min: 0 }).withMessage('Price range max must be non-negative')
+], async (req: AuthRequest, res: express.Response): Promise<void> => {
   try {
-    const { name, minAmount, maxAmount, permissions, order, description, features } = req.body;
-    
-    const tier = new MembershipTier({
+    // 检查管理员权限
+    if (req.user!.role !== 'admin') {
+      res.status(403).json({ error: 'Admin access required' });
+      return;
+    }
+
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.status(400).json({ errors: errors.array() });
+      return;
+    }
+
+    const { name, level, description, priceRangeMin, priceRangeMax, permissions, features, order } = req.body;
+
+    const tier = await MembershipTier.create({
       name,
-      minAmount,
-      maxAmount,
-      permissions,
-      order,
+      level,
       description,
-      features
+      priceRangeMin,
+      priceRangeMax,
+      color: '#3B82F6',
+      icon: '⭐',
+      permissions: permissions || {},
+      benefits: features || [],
+      isActive: true
     });
 
-    await tier.save();
-
-    res.json({
-      success: true,
-      message: '会员等级创建成功',
-      data: tier
+    res.status(201).json({
+      message: 'Membership tier created successfully',
+      tier
     });
   } catch (error) {
-    console.error('创建会员等级失败:', error);
-    res.status(500).json({
-      success: false,
-      message: '创建会员等级失败'
-    });
+    console.error('Create membership tier error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// 更新会员等级
-router.put('/admin/tiers/:id', auth, requireRole('admin'), async (req, res) => {
+// 管理员：更新会员等级
+router.put('/admin/tiers/:id', auth, async (req: AuthRequest, res: express.Response): Promise<void> => {
   try {
-    const tier = await MembershipTier.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { new: true }
-    );
-
-    if (!tier) {
-      return res.status(404).json({
-        success: false,
-        message: '会员等级不存在'
-      });
+    // 检查管理员权限
+    if (req.user!.role !== 'admin') {
+      res.status(403).json({ error: 'Admin access required' });
+      return;
     }
 
+    const tier = await MembershipTier.findByPk(req.params.id);
+    if (!tier) {
+      res.status(404).json({ error: 'Membership tier not found' });
+      return;
+    }
+
+    const allowedUpdates = ['name', 'description', 'priceRangeMin', 'priceRangeMax', 'permissions', 'features', 'order', 'isActive'];
+    const updates = Object.keys(req.body);
+    const isValidOperation = updates.every(update => allowedUpdates.includes(update));
+
+    if (!isValidOperation) {
+      res.status(400).json({ error: 'Invalid updates' });
+      return;
+    }
+
+    const updateData: any = {};
+    updates.forEach(update => {
+      updateData[update] = req.body[update];
+    });
+
+    await tier.update(updateData);
+
     res.json({
-      success: true,
-      message: '会员等级更新成功',
-      data: tier
+      message: 'Membership tier updated successfully',
+      tier
     });
   } catch (error) {
-    console.error('更新会员等级失败:', error);
-    res.status(500).json({
-      success: false,
-      message: '更新会员等级失败'
-    });
+    console.error('Update membership tier error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// 创建优惠券
-router.post('/admin/coupons', auth, requireRole('admin'), async (req, res) => {
+// 管理员：创建优惠券
+router.post('/admin/coupons', auth, [
+  body('code').isLength({ min: 1, max: 20 }).withMessage('Coupon code is required'),
+  body('discountType').isIn(['fixed', 'percentage']).withMessage('Invalid discount type'),
+  body('discountValue').isFloat({ min: 0 }).withMessage('Discount value must be non-negative'),
+  body('minAmount').isFloat({ min: 0 }).withMessage('Min amount must be non-negative')
+], async (req: AuthRequest, res: express.Response): Promise<void> => {
   try {
-    const { name, description, discountType, discountValue, minAmount, usageLimit, validFrom, validTo } = req.body;
-    
-    // 生成优惠券代码
-    const code = 'COUPON' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substr(2, 4).toUpperCase();
-    
-    const coupon = new Coupon({
+    // 检查管理员权限
+    if (req.user!.role !== 'admin') {
+      res.status(403).json({ error: 'Admin access required' });
+      return;
+    }
+
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.status(400).json({ errors: errors.array() });
+      return;
+    }
+
+    const { code, description, discountType, discountValue, minAmount, maxDiscount, expiresAt } = req.body;
+
+    const coupon = await Coupon.create({
       code,
-      name,
+      name: code,
       description,
       discountType,
       discountValue,
-      minAmount,
-      usageLimit,
-      validFrom: new Date(validFrom),
-      validTo: new Date(validTo)
+      minPurchaseAmount: minAmount,
+      maxDiscountAmount: maxDiscount,
+      validFrom: new Date(),
+      validTo: expiresAt ? new Date(expiresAt) : new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+      usageLimit: 100,
+      usedCount: 0,
+      applicableTierIds: [],
+      createdById: req.user!.userId,
+      isActive: true
     });
 
-    await coupon.save();
-
-    res.json({
-      success: true,
-      message: '优惠券创建成功',
-      data: coupon
+    res.status(201).json({
+      message: 'Coupon created successfully',
+      coupon
     });
   } catch (error) {
-    console.error('创建优惠券失败:', error);
-    res.status(500).json({
-      success: false,
-      message: '创建优惠券失败'
-    });
+    console.error('Create coupon error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// 创建序列号
-router.post('/admin/serial-codes', auth, requireRole('admin'), async (req, res) => {
+// 管理员：创建序列号
+router.post('/admin/serial-codes', auth, [
+  body('type').isIn(['membership', 'coupon']).withMessage('Invalid serial code type'),
+  body('value').isFloat({ min: 0 }).withMessage('Value must be non-negative')
+], async (req: AuthRequest, res: express.Response): Promise<void> => {
   try {
-    const { name, description, type, targetId, value, quantity, expiresAt } = req.body;
-    
-    const serialCodes = [];
-    
-    for (let i = 0; i < quantity; i++) {
-      const code = type.toUpperCase() + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substr(2, 6).toUpperCase();
-      
-      const serial = new SerialCode({
-        code,
-        name,
-        description,
-        type,
-        targetId,
-        value,
-        expiresAt: expiresAt ? new Date(expiresAt) : undefined
-      });
-
-      await serial.save();
-      serialCodes.push(serial);
+    // 检查管理员权限
+    if (req.user!.role !== 'admin') {
+      res.status(403).json({ error: 'Admin access required' });
+      return;
     }
 
-    res.json({
-      success: true,
-      message: `成功创建 ${quantity} 个序列号`,
-      data: serialCodes
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.status(400).json({ errors: errors.array() });
+      return;
+    }
+
+    const { type, value, description, expiresAt, quantity = 1 } = req.body;
+
+    const serialCodes = [];
+    for (let i = 0; i < quantity; i++) {
+      const code = `SC${Date.now()}${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
+      
+      const serialCode = await SerialCode.create({
+        code,
+        membershipTierId: type,
+        isUsed: false,
+        validFrom: new Date(),
+        validTo: expiresAt ? new Date(expiresAt) : new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+        batchId: `BATCH-${Date.now()}`,
+        createdById: req.user!.userId
+      });
+      
+      serialCodes.push(serialCode);
+    }
+
+    res.status(201).json({
+      message: `${quantity} serial code(s) created successfully`,
+      serialCodes
     });
   } catch (error) {
-    console.error('创建序列号失败:', error);
-    res.status(500).json({
-      success: false,
-      message: '创建序列号失败'
-    });
+    console.error('Create serial codes error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// 获取所有优惠券（管理员）
-router.get('/admin/coupons', auth, requireRole('admin'), async (req, res) => {
+// 管理员：获取所有优惠券
+router.get('/admin/coupons', auth, async (req: AuthRequest, res: express.Response): Promise<void> => {
   try {
-    const coupons = await Coupon.find().sort({ createdAt: -1 });
-    res.json({
-      success: true,
-      data: coupons
+    // 检查管理员权限
+    if (req.user!.role !== 'admin') {
+      res.status(403).json({ error: 'Admin access required' });
+      return;
+    }
+
+    const coupons = await Coupon.findAll({
+      order: [['createdAt', 'DESC']]
     });
+
+    res.json({ coupons });
   } catch (error) {
-    console.error('获取优惠券失败:', error);
-    res.status(500).json({
-      success: false,
-      message: '获取优惠券失败'
-    });
+    console.error('Get coupons error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// 获取所有序列号（管理员）
-router.get('/admin/serial-codes', auth, requireRole('admin'), async (req, res) => {
+// 管理员：获取所有序列号
+router.get('/admin/serial-codes', auth, async (req: AuthRequest, res: express.Response): Promise<void> => {
   try {
-    const serialCodes = await SerialCode.find().sort({ createdAt: -1 });
-    res.json({
-      success: true,
-      data: serialCodes
+    // 检查管理员权限
+    if (req.user!.role !== 'admin') {
+      res.status(403).json({ error: 'Admin access required' });
+      return;
+    }
+
+    const serialCodes = await SerialCode.findAll({
+      order: [['createdAt', 'DESC']]
     });
+
+    res.json({ serialCodes });
   } catch (error) {
-    console.error('获取序列号失败:', error);
-    res.status(500).json({
-      success: false,
-      message: '获取序列号失败'
-    });
+    console.error('Get serial codes error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 

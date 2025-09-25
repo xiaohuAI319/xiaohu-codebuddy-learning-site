@@ -10,7 +10,7 @@ import membershipRoutes from './routes/membership';
 const app = express();
 
 // 连接数据库
-connectDB();
+// connectDB(); // 使用SQLite，不需要连接函数
 
 // 中间件
 app.use(cors());

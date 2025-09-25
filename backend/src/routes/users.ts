@@ -1,52 +1,44 @@
-import express from 'express';
-import { body, query, validationResult } from 'express-validator';
+import express, { Request, Response } from 'express';
+import { body, validationResult } from 'express-validator';
+import { Op } from 'sequelize';
 import User from '../models/User';
-import Work from '../models/Work';
 import { auth, adminAuth } from '../middleware/auth';
 
 const router = express.Router();
 
 // 获取用户列表（管理员）
 router.get('/', adminAuth, [
-  query('page').optional().isInt({ min: 1 }),
-  query('limit').optional().isInt({ min: 1, max: 50 }),
-  query('role').optional().isIn(['admin', 'coach', 'student', 'volunteer'])
-], async (req, res) => {
+  // 可选的查询参数验证
+], async (req: Request, res: Response): Promise<void> => {
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
+    const { page = 1, limit = 10, search, role } = req.query;
+    const offset = (Number(page) - 1) * Number(limit);
+
+    // 构建查询条件
+    const whereClause: any = {};
+    
+    if (search) {
+      whereClause[Op.or] = [
+        { username: { [Op.like]: `%${search}%` } },
+        { email: { [Op.like]: `%${search}%` } },
+        { nickname: { [Op.like]: `%${search}%` } }
+      ];
     }
-
-    const { page = 1, limit = 20, role } = req.query;
-    const skip = (Number(page) - 1) * Number(limit);
-
-    const query: any = {};
+    
     if (role) {
-      query.role = role;
+      whereClause.role = role;
     }
 
-    const users = await User.find(query)
-      .select('-password')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(Number(limit));
-
-    const total = await User.countDocuments(query);
-
-    // 获取每个用户的作品数量
-    const usersWithStats = await Promise.all(
-      users.map(async (user) => {
-        const worksCount = await Work.countDocuments({ author: user._id });
-        return {
-          ...user.toObject(),
-          worksCount
-        };
-      })
-    );
+    const { rows: users, count: total } = await User.findAndCountAll({
+      where: whereClause,
+      limit: Number(limit),
+      offset,
+      order: [['createdAt', 'DESC']],
+      attributes: { exclude: ['password'] }
+    });
 
     res.json({
-      users: usersWithStats,
+      users,
       pagination: {
         page: Number(page),
         limit: Number(limit),
@@ -60,30 +52,19 @@ router.get('/', adminAuth, [
   }
 });
 
-// 获取用户详情
-router.get('/:id', async (req, res) => {
+// 获取单个用户信息
+router.get('/:id', async (req: Request, res: Response): Promise<void> => {
   try {
-    const user = await User.findById(req.params.id).select('-password');
+    const user = await User.findByPk(req.params.id, {
+      attributes: { exclude: ['password'] }
+    });
+    
     if (!user) {
-      return res.status(404).json({ error: 'User not found' });
+      res.status(404).json({ error: 'User not found' });
+      return;
     }
 
-    // 获取用户的作品
-    const works = await Work.find({ 
-      author: req.params.id, 
-      status: 'published' 
-    })
-    .select('title coverImage votes views createdAt')
-    .sort({ createdAt: -1 })
-    .limit(10);
-
-    const worksCount = await Work.countDocuments({ author: req.params.id });
-
-    res.json({
-      user,
-      works,
-      worksCount
-    });
+    res.json({ user: user.toJSON() });
   } catch (error) {
     console.error('Get user error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -94,41 +75,39 @@ router.get('/:id', async (req, res) => {
 router.put('/:id', auth, [
   body('nickname').optional().isLength({ min: 1, max: 50 }).trim(),
   body('bio').optional().isLength({ max: 500 }).trim(),
-  body('avatar').optional().isString()
-], async (req, res) => {
+  body('avatar').optional().isURL()
+], async (req: Request, res: Response): Promise<void> => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
+      res.status(400).json({ errors: errors.array() });
+      return;
     }
 
-    // 检查权限：只能更新自己的信息或管理员可以更新任何人
-    if (req.params.id !== req.user.userId && req.user.role !== 'admin') {
-      return res.status(403).json({ error: 'Access denied' });
-    }
-
-    const user = await User.findById(req.params.id);
+    const user = await User.findByPk(req.params.id);
     if (!user) {
-      return res.status(404).json({ error: 'User not found' });
+      res.status(404).json({ error: 'User not found' });
+      return;
     }
 
-    const allowedUpdates = ['nickname', 'bio', 'avatar'];
-    const updates = Object.keys(req.body);
-    const isValidOperation = updates.every(update => allowedUpdates.includes(update));
-
-    if (!isValidOperation) {
-      return res.status(400).json({ error: 'Invalid updates' });
+    // 检查权限：只能修改自己的信息或管理员可以修改任何人
+    const currentUser = req as any;
+    if (currentUser.user.userId !== user.id && currentUser.user.role !== 'admin') {
+      res.status(403).json({ error: 'Access denied' });
+      return;
     }
 
-    updates.forEach(update => {
-      (user as any)[update] = req.body[update];
+    const { nickname, bio, avatar } = req.body;
+    
+    await user.update({
+      ...(nickname && { nickname }),
+      ...(bio !== undefined && { bio }),
+      ...(avatar && { avatar })
     });
-
-    await user.save();
 
     res.json({
       message: 'User updated successfully',
-      user
+      user: user.toJSON()
     });
   } catch (error) {
     console.error('Update user error:', error);
@@ -136,27 +115,28 @@ router.put('/:id', auth, [
   }
 });
 
-// 管理员：更新用户角色
+// 更新用户角色（管理员）
 router.patch('/:id/role', adminAuth, [
   body('role').isIn(['admin', 'coach', 'student', 'volunteer'])
-], async (req, res) => {
+], async (req: Request, res: Response): Promise<void> => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
+      res.status(400).json({ errors: errors.array() });
+      return;
     }
 
-    const user = await User.findById(req.params.id);
+    const user = await User.findByPk(req.params.id);
     if (!user) {
-      return res.status(404).json({ error: 'User not found' });
+      res.status(404).json({ error: 'User not found' });
+      return;
     }
 
-    user.role = req.body.role;
-    await user.save();
+    await user.update({ role: req.body.role });
 
     res.json({
       message: 'User role updated successfully',
-      user
+      user: user.toJSON()
     });
   } catch (error) {
     console.error('Update user role error:', error);
@@ -164,27 +144,28 @@ router.patch('/:id/role', adminAuth, [
   }
 });
 
-// 管理员：激活/停用用户
+// 激活/停用用户（管理员）
 router.patch('/:id/status', adminAuth, [
   body('isActive').isBoolean()
-], async (req, res) => {
+], async (req: Request, res: Response): Promise<void> => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
+      res.status(400).json({ errors: errors.array() });
+      return;
     }
 
-    const user = await User.findById(req.params.id);
+    const user = await User.findByPk(req.params.id);
     if (!user) {
-      return res.status(404).json({ error: 'User not found' });
+      res.status(404).json({ error: 'User not found' });
+      return;
     }
 
-    user.isActive = req.body.isActive;
-    await user.save();
+    await user.update({ isActive: req.body.isActive });
 
     res.json({
       message: `User ${req.body.isActive ? 'activated' : 'deactivated'} successfully`,
-      user
+      user: user.toJSON()
     });
   } catch (error) {
     console.error('Update user status error:', error);
@@ -193,20 +174,23 @@ router.patch('/:id/status', adminAuth, [
 });
 
 // 删除用户（管理员）
-router.delete('/:id', adminAuth, async (req, res) => {
+router.delete('/:id', adminAuth, async (req: Request, res: Response): Promise<void> => {
   try {
-    const user = await User.findById(req.params.id);
+    const user = await User.findByPk(req.params.id);
     if (!user) {
-      return res.status(404).json({ error: 'User not found' });
+      res.status(404).json({ error: 'User not found' });
+      return;
     }
 
-    // 删除用户的所有作品
-    await Work.deleteMany({ author: req.params.id });
-    
-    // 删除用户
-    await User.findByIdAndDelete(req.params.id);
+    // 防止删除管理员账号
+    if (user.role === 'admin') {
+      res.status(403).json({ error: 'Cannot delete admin user' });
+      return;
+    }
 
-    res.json({ message: 'User and associated works deleted successfully' });
+    await user.destroy();
+
+    res.json({ message: 'User deleted successfully' });
   } catch (error) {
     console.error('Delete user error:', error);
     res.status(500).json({ error: 'Internal server error' });

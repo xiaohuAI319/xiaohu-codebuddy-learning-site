@@ -1,7 +1,9 @@
-import mongoose, { Document, Schema } from 'mongoose';
+import { DataTypes, Model, Optional } from 'sequelize';
 import bcrypt from 'bcryptjs';
+import sequelize from '../config/database';
 
-export interface IUser extends Document {
+export interface IUser {
+  id: number;
   username: string;
   email: string;
   password: string;
@@ -13,195 +15,234 @@ export interface IUser extends Document {
   isActive: boolean;
   
   // 会员体系相关字段
-  membershipTier?: mongoose.Types.ObjectId;
+  membershipTierId?: number;
   currentLevel: string;
+  totalSpent: number;
   totalPaid: number;
   membershipExpiry?: Date;
-  coupons: Array<{
-    code: string;
-    discountType: 'percent' | 'fixed';
-    discountValue: number;
-    minAmount: number;
-    used: boolean;
-    expiry: Date;
-  }>;
+  availableCoupons: string[];
+  usedCoupons: number[];
+  paymentHistory: string[];
   
-  comparePassword(candidatePassword: string): Promise<boolean>;
-  getCurrentTier(): Promise<any>;
-  hasPermission(permission: string): Promise<boolean>;
-  updateMembershipLevel(amount: number): Promise<void>;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
-const UserSchema = new Schema<IUser>({
+interface UserCreationAttributes extends Optional<IUser, 'id' | 'createdAt' | 'updatedAt'> {}
+
+class User extends Model<IUser, UserCreationAttributes> implements IUser {
+  public id!: number;
+  public username!: string;
+  public email!: string;
+  public password!: string;
+  public nickname!: string;
+  public role!: 'admin' | 'coach' | 'student' | 'volunteer';
+  public avatar?: string;
+  public bio?: string;
+  public joinDate!: Date;
+  public isActive!: boolean;
+  
+  public membershipTierId?: number;
+  public currentLevel!: string;
+  public totalSpent!: number;
+  public totalPaid!: number;
+  public membershipExpiry?: Date;
+  public availableCoupons!: string[];
+  public usedCoupons!: number[];
+  public paymentHistory!: string[];
+  
+  public readonly createdAt!: Date;
+  public readonly updatedAt!: Date;
+
+  // 实例方法
+  public async comparePassword(candidatePassword: string): Promise<boolean> {
+    return bcrypt.compare(candidatePassword, this.password);
+  }
+
+  public async getCurrentTier(): Promise<any> {
+    if (!this.membershipTierId) {
+      const MembershipTier = sequelize.models.MembershipTier as any;
+      return await MembershipTier.getTierByAmount(this.totalSpent);
+    }
+    const MembershipTier = sequelize.models.MembershipTier;
+    return await MembershipTier.findByPk(this.membershipTierId);
+  }
+
+  public async hasPermission(permission: string): Promise<boolean> {
+    if (this.role === 'admin') return true;
+    
+    const tier = await this.getCurrentTier();
+    if (!tier) return false;
+    
+    return tier.permissions[permission] === true;
+  }
+
+  public toJSON(): Partial<IUser> {
+    const values = Object.assign({}, this.get()) as any;
+    delete values.password;
+    return values;
+  }
+}
+
+User.init({
+  id: {
+    type: DataTypes.INTEGER,
+    autoIncrement: true,
+    primaryKey: true
+  },
   username: {
-    type: String,
-    required: true,
+    type: DataTypes.STRING(50),
+    allowNull: false,
     unique: true,
-    trim: true,
-    minlength: 3,
-    maxlength: 20
+    validate: {
+      len: [3, 20]
+    }
   },
   email: {
-    type: String,
-    required: true,
+    type: DataTypes.STRING(100),
+    allowNull: false,
     unique: true,
-    trim: true,
-    lowercase: true
+    validate: {
+      isEmail: true
+    }
   },
   password: {
-    type: String,
-    required: true,
-    minlength: 6
+    type: DataTypes.STRING(255),
+    allowNull: false,
+    validate: {
+      len: [6, 255]
+    }
   },
   nickname: {
-    type: String,
-    required: true,
-    trim: true,
-    maxlength: 50
+    type: DataTypes.STRING(50),
+    allowNull: false,
+    validate: {
+      len: [1, 50]
+    }
   },
   role: {
-    type: String,
-    enum: ['admin', 'coach', 'student', 'volunteer'],
-    default: 'student'
+    type: DataTypes.ENUM('admin', 'coach', 'student', 'volunteer'),
+    allowNull: false,
+    defaultValue: 'student'
   },
   avatar: {
-    type: String,
-    default: null
+    type: DataTypes.STRING(255),
+    allowNull: true
   },
   bio: {
-    type: String,
-    maxlength: 500,
-    default: ''
+    type: DataTypes.TEXT,
+    allowNull: true,
+    validate: {
+      len: [0, 500]
+    }
   },
   joinDate: {
-    type: Date,
-    default: Date.now
+    type: DataTypes.DATE,
+    allowNull: false,
+    defaultValue: DataTypes.NOW
   },
   isActive: {
-    type: Boolean,
-    default: true
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: true
   },
-  
-  // 会员体系字段
-  membershipTier: {
-    type: Schema.Types.ObjectId,
-    ref: 'MembershipTier',
-    default: null
+  membershipTierId: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    references: {
+      model: 'membership_tiers',
+      key: 'id'
+    }
   },
   currentLevel: {
-    type: String,
-    default: '学员'
+    type: DataTypes.STRING(50),
+    allowNull: false,
+    defaultValue: '学员'
+  },
+  totalSpent: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: false,
+    defaultValue: 0,
+    validate: {
+      min: 0
+    }
   },
   totalPaid: {
-    type: Number,
-    default: 0,
-    min: 0
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: false,
+    defaultValue: 0,
+    validate: {
+      min: 0
+    }
   },
   membershipExpiry: {
-    type: Date,
-    default: null
+    type: DataTypes.DATE,
+    allowNull: true
   },
-  coupons: [{
-    code: {
-      type: String,
-      required: true
+  availableCoupons: {
+    type: DataTypes.TEXT,
+    allowNull: false,
+    defaultValue: '[]',
+    get() {
+      const value = this.getDataValue('availableCoupons') as unknown as string;
+      return value ? JSON.parse(value) : [];
     },
-    discountType: {
-      type: String,
-      enum: ['percent', 'fixed'],
-      required: true
-    },
-    discountValue: {
-      type: Number,
-      required: true,
-      min: 0
-    },
-    minAmount: {
-      type: Number,
-      default: 0,
-      min: 0
-    },
-    used: {
-      type: Boolean,
-      default: false
-    },
-    expiry: {
-      type: Date,
-      required: true
+    set(value: string[]) {
+      this.setDataValue('availableCoupons', JSON.stringify(value) as any);
     }
-  }]
+  },
+  usedCoupons: {
+    type: DataTypes.TEXT,
+    allowNull: false,
+    defaultValue: '[]',
+    get() {
+      const value = this.getDataValue('usedCoupons') as unknown as string;
+      return value ? JSON.parse(value) : [];
+    },
+    set(value: number[]) {
+      this.setDataValue('usedCoupons', JSON.stringify(value) as any);
+    }
+  },
+  paymentHistory: {
+    type: DataTypes.TEXT,
+    allowNull: false,
+    defaultValue: '[]',
+    get() {
+      const value = this.getDataValue('paymentHistory') as unknown as string;
+      return value ? JSON.parse(value) : [];
+    },
+    set(value: string[]) {
+      this.setDataValue('paymentHistory', JSON.stringify(value) as any);
+    }
+  },
+  createdAt: {
+    type: DataTypes.DATE,
+    allowNull: false,
+    defaultValue: DataTypes.NOW
+  },
+  updatedAt: {
+    type: DataTypes.DATE,
+    allowNull: false,
+    defaultValue: DataTypes.NOW
+  }
 }, {
-  timestamps: true
-});
-
-// 索引
-UserSchema.index({ membershipTier: 1 });
-UserSchema.index({ currentLevel: 1 });
-UserSchema.index({ totalPaid: 1 });
-
-// 密码加密中间件
-UserSchema.pre('save', async function(next) {
-  if (!this.isModified('password')) return next();
-  
-  try {
-    const salt = await bcrypt.genSalt(12);
-    this.password = await bcrypt.hash(this.password, salt);
-    next();
-  } catch (error) {
-    next(error as Error);
+  sequelize,
+  modelName: 'User',
+  tableName: 'users',
+  indexes: [
+    { fields: ['email'] },
+    { fields: ['username'] },
+    { fields: ['membershipTierId'] },
+    { fields: ['role'] }
+  ],
+  hooks: {
+    beforeSave: async (user: User) => {
+      if (user.changed('password')) {
+        const salt = await bcrypt.genSalt(12);
+        user.password = await bcrypt.hash(user.password, salt);
+      }
+    }
   }
 });
 
-// 密码比较方法
-UserSchema.methods.comparePassword = async function(candidatePassword: string): Promise<boolean> {
-  return bcrypt.compare(candidatePassword, this.password);
-};
-
-// 获取当前会员等级
-UserSchema.methods.getCurrentTier = async function() {
-  if (!this.membershipTier) {
-    const MembershipTier = mongoose.model('MembershipTier');
-    return await MembershipTier.getTierByAmount(this.totalPaid);
-  }
-  return await mongoose.model('MembershipTier').findById(this.membershipTier);
-};
-
-// 检查权限
-UserSchema.methods.hasPermission = async function(permission: string): Promise<boolean> {
-  // 管理员拥有所有权限
-  if (this.role === 'admin') return true;
-  
-  const tier = await this.getCurrentTier();
-  if (!tier) return false;
-  
-  return tier.permissions.includes(permission);
-};
-
-// 更新会员等级
-UserSchema.methods.updateMembershipLevel = async function(amount: number): Promise<void> {
-  this.totalPaid += amount;
-  
-  const MembershipTier = mongoose.model('MembershipTier');
-  const newTier = await MembershipTier.getTierByAmount(this.totalPaid);
-  
-  if (newTier) {
-    this.membershipTier = newTier._id;
-    this.currentLevel = newTier.name;
-    
-    // 设置会员到期时间（1年）
-    const expiry = new Date();
-    expiry.setFullYear(expiry.getFullYear() + 1);
-    this.membershipExpiry = expiry;
-  }
-  
-  await this.save();
-};
-
-// 删除密码字段在JSON序列化时
-UserSchema.methods.toJSON = function() {
-  const userObject = this.toObject();
-  delete userObject.password;
-  return userObject;
-};
-
-export default mongoose.model<IUser>('User', UserSchema);
+export default User;

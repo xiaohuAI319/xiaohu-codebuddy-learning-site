@@ -2,13 +2,12 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
-import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
 import path from 'path';
 
-// 导入工具函数
-import { initializeDatabase } from './utils/database';
+// 导入数据库配置
+import sequelize from './config/database';
 
 // 导入路由
 import authRoutes from './routes/auth';
@@ -17,7 +16,7 @@ import workRoutes from './routes/works';
 import categoryRoutes from './routes/categories';
 import uploadRoutes from './routes/upload';
 import membershipRoutes from './routes/membership';
-import adminRoutes from './routes/admin';
+// import adminRoutes from './routes/admin'; // 已删除
 
 // 加载环境变量
 dotenv.config();
@@ -58,14 +57,15 @@ app.use('/api/works', workRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/membership', membershipRoutes);
-app.use('/api/admin', adminRoutes);
+// app.use('/api/admin', adminRoutes); // 已删除
 
 // 健康检查
 app.get('/api/health', (req, res) => {
   res.json({ 
     status: 'OK', 
     timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development'
+    environment: process.env.NODE_ENV || 'development',
+    database: 'SQLite'
   });
 });
 
@@ -88,13 +88,21 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
     });
   }
   
-  if (err.name === 'CastError') {
+  if (err.name === 'SequelizeValidationError') {
     return res.status(400).json({
-      error: 'Invalid ID format'
+      error: 'Validation Error',
+      details: err.errors?.map((e: any) => e.message).join(', ') || err.message
     });
   }
   
-  res.status(500).json({
+  if (err.name === 'SequelizeUniqueConstraintError') {
+    return res.status(409).json({
+      error: 'Duplicate Entry',
+      details: 'Resource already exists'
+    });
+  }
+  
+  return res.status(500).json({
     error: 'Internal Server Error',
     message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong'
   });
@@ -103,14 +111,16 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 // 数据库连接
 const connectDB = async () => {
   try {
-    const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/xiaohu-codebuddy';
-    await mongoose.connect(mongoURI);
-    console.log('✅ MongoDB connected successfully');
+    await sequelize.authenticate();
+    console.log('✅ SQLite数据库连接成功');
     
-    // 初始化数据库数据
-    await initializeDatabase();
+    // 同步数据库表结构（开发环境）
+    if (process.env.NODE_ENV !== 'production') {
+      await sequelize.sync();
+      console.log('✅ 数据库表结构同步完成');
+    }
   } catch (error) {
-    console.error('❌ MongoDB connection error:', error);
+    console.error('❌ SQLite数据库连接失败:', error);
     process.exit(1);
   }
 };
@@ -120,10 +130,10 @@ const startServer = async () => {
   await connectDB();
   
   app.listen(PORT, () => {
-    console.log(`🚀 Server running on port ${PORT}`);
-    console.log(`📱 Environment: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`🌐 Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:3000'}`);
-    console.log(`📊 API Health Check: http://localhost:${PORT}/api/health`);
+    console.log(`🚀 服务器运行在端口 ${PORT}`);
+    console.log(`📱 环境: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`🌐 前端地址: ${process.env.FRONTEND_URL || 'http://localhost:3000'}`);
+    console.log(`📊 API健康检查: http://localhost:${PORT}/api/health`);
   });
 };
 

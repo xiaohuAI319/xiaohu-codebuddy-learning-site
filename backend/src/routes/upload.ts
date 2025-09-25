@@ -2,7 +2,7 @@ import express from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
-import { auth } from '../middleware/auth';
+import { auth, AuthRequest } from '../middleware/auth';
 
 const router = express.Router();
 
@@ -74,10 +74,11 @@ const upload = multer({
 });
 
 // 上传封面图片
-router.post('/cover-image', auth, upload.single('coverImage'), (req, res) => {
+router.post('/cover-image', auth, upload.single('coverImage'), (req: AuthRequest, res: express.Response): void => {
   try {
     if (!req.file) {
-      return res.status(400).json({ error: 'No file uploaded' });
+      res.status(400).json({ error: 'No file uploaded' });
+      return;
     }
 
     const fileUrl = `/uploads/images/${req.file.filename}`;
@@ -96,10 +97,11 @@ router.post('/cover-image', auth, upload.single('coverImage'), (req, res) => {
 });
 
 // 上传作品文件
-router.post('/work-file', auth, upload.single('workFile'), (req, res) => {
+router.post('/work-file', auth, upload.single('workFile'), (req: AuthRequest, res: express.Response): void => {
   try {
     if (!req.file) {
-      return res.status(400).json({ error: 'No file uploaded' });
+      res.status(400).json({ error: 'No file uploaded' });
+      return;
     }
 
     const fileUrl = `/uploads/files/${req.file.filename}`;
@@ -121,12 +123,13 @@ router.post('/work-file', auth, upload.single('workFile'), (req, res) => {
 router.post('/batch', auth, upload.fields([
   { name: 'coverImage', maxCount: 1 },
   { name: 'workFile', maxCount: 1 }
-]), (req, res) => {
+]), (req: AuthRequest, res: express.Response): void => {
   try {
     const files = req.files as { [fieldname: string]: Express.Multer.File[] };
     
     if (!files.coverImage || !files.coverImage[0]) {
-      return res.status(400).json({ error: 'Cover image is required' });
+      res.status(400).json({ error: 'Cover image is required' });
+      return;
     }
 
     const result: any = {
@@ -158,7 +161,7 @@ router.post('/batch', auth, upload.fields([
 });
 
 // 删除文件
-router.delete('/file/:filename', auth, (req, res) => {
+router.delete('/file/:filename', auth, (req: AuthRequest, res: express.Response): void => {
   try {
     const { filename } = req.params;
     const { type } = req.query; // 'image' or 'file'
@@ -169,7 +172,8 @@ router.delete('/file/:filename', auth, (req, res) => {
     } else if (type === 'file') {
       filePath = path.join(filesDir, filename);
     } else {
-      return res.status(400).json({ error: 'Invalid file type' });
+      res.status(400).json({ error: 'Invalid file type' });
+      return;
     }
 
     if (fs.existsSync(filePath)) {
@@ -185,21 +189,25 @@ router.delete('/file/:filename', auth, (req, res) => {
 });
 
 // 错误处理中间件
-router.use((error: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+router.use((error: any, req: express.Request, res: express.Response, next: express.NextFunction): void => {
   if (error instanceof multer.MulterError) {
     if (error.code === 'LIMIT_FILE_SIZE') {
-      return res.status(400).json({ error: 'File too large. Maximum size is 10MB.' });
+      res.status(400).json({ error: 'File too large. Maximum size is 10MB.' });
+      return;
     }
     if (error.code === 'LIMIT_FILE_COUNT') {
-      return res.status(400).json({ error: 'Too many files. Maximum is 2 files.' });
+      res.status(400).json({ error: 'Too many files. Maximum is 2 files.' });
+      return;
     }
     if (error.code === 'LIMIT_UNEXPECTED_FILE') {
-      return res.status(400).json({ error: 'Unexpected field name.' });
+      res.status(400).json({ error: 'Unexpected field name.' });
+      return;
     }
   }
   
   if (error.message) {
-    return res.status(400).json({ error: error.message });
+    res.status(400).json({ error: error.message });
+    return;
   }
   
   res.status(500).json({ error: 'Upload failed' });

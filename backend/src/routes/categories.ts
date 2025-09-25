@@ -1,15 +1,17 @@
 import express from 'express';
 import { body, validationResult } from 'express-validator';
 import Category from '../models/Category';
-import { adminAuth } from '../middleware/auth';
+import { auth, AuthRequest } from '../middleware/auth';
 
 const router = express.Router();
 
 // 获取所有分类
-router.get('/', async (req, res) => {
+router.get('/', async (req: express.Request, res: express.Response): Promise<void> => {
   try {
-    const categories = await Category.find({ isActive: true })
-      .sort({ order: 1, createdAt: 1 });
+    const categories = await Category.findAll({
+      where: { isActive: true },
+      order: [['order', 'ASC'], ['createdAt', 'ASC']]
+    });
 
     res.json({ categories });
   } catch (error) {
@@ -19,34 +21,41 @@ router.get('/', async (req, res) => {
 });
 
 // 创建分类（管理员）
-router.post('/', adminAuth, [
+router.post('/', [
+  auth,
   body('id').isLength({ min: 1, max: 50 }).trim(),
   body('name').isLength({ min: 1, max: 50 }).trim(),
   body('description').optional().isLength({ max: 200 }).trim(),
   body('order').optional().isInt({ min: 0 })
-], async (req, res) => {
+], async (req: AuthRequest, res: express.Response): Promise<void> => {
   try {
+    // 检查管理员权限
+    if (req.user!.role !== 'admin') {
+      res.status(403).json({ error: 'Admin access required' });
+      return;
+    }
+
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
+      res.status(400).json({ errors: errors.array() });
+      return;
     }
 
     const { id, name, description, order = 0 } = req.body;
 
     // 检查ID是否已存在
-    const existingCategory = await Category.findOne({ id });
+    const existingCategory = await Category.findByPk(id);
     if (existingCategory) {
-      return res.status(400).json({ error: 'Category ID already exists' });
+      res.status(400).json({ error: 'Category ID already exists' });
+      return;
     }
 
-    const category = new Category({
+    const category = await Category.create({
       id,
       name,
       description,
       order
     });
-
-    await category.save();
 
     res.status(201).json({
       message: 'Category created successfully',
@@ -59,21 +68,30 @@ router.post('/', adminAuth, [
 });
 
 // 更新分类（管理员）
-router.put('/:id', adminAuth, [
+router.put('/:id', [
+  auth,
   body('name').optional().isLength({ min: 1, max: 50 }).trim(),
   body('description').optional().isLength({ max: 200 }).trim(),
   body('order').optional().isInt({ min: 0 }),
   body('isActive').optional().isBoolean()
-], async (req, res) => {
+], async (req: AuthRequest, res: express.Response): Promise<void> => {
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
+    // 检查管理员权限
+    if (req.user!.role !== 'admin') {
+      res.status(403).json({ error: 'Admin access required' });
+      return;
     }
 
-    const category = await Category.findOne({ id: req.params.id });
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.status(400).json({ errors: errors.array() });
+      return;
+    }
+
+    const category = await Category.findByPk(req.params.id);
     if (!category) {
-      return res.status(404).json({ error: 'Category not found' });
+      res.status(404).json({ error: 'Category not found' });
+      return;
     }
 
     const allowedUpdates = ['name', 'description', 'order', 'isActive'];
@@ -81,14 +99,16 @@ router.put('/:id', adminAuth, [
     const isValidOperation = updates.every(update => allowedUpdates.includes(update));
 
     if (!isValidOperation) {
-      return res.status(400).json({ error: 'Invalid updates' });
+      res.status(400).json({ error: 'Invalid updates' });
+      return;
     }
 
+    const updateData: any = {};
     updates.forEach(update => {
-      (category as any)[update] = req.body[update];
+      updateData[update] = req.body[update];
     });
 
-    await category.save();
+    await category.update(updateData);
 
     res.json({
       message: 'Category updated successfully',
@@ -101,14 +121,21 @@ router.put('/:id', adminAuth, [
 });
 
 // 删除分类（管理员）
-router.delete('/:id', adminAuth, async (req, res) => {
+router.delete('/:id', auth, async (req: AuthRequest, res: express.Response): Promise<void> => {
   try {
-    const category = await Category.findOne({ id: req.params.id });
-    if (!category) {
-      return res.status(404).json({ error: 'Category not found' });
+    // 检查管理员权限
+    if (req.user!.role !== 'admin') {
+      res.status(403).json({ error: 'Admin access required' });
+      return;
     }
 
-    await Category.deleteOne({ id: req.params.id });
+    const category = await Category.findByPk(req.params.id);
+    if (!category) {
+      res.status(404).json({ error: 'Category not found' });
+      return;
+    }
+
+    await category.destroy();
 
     res.json({ message: 'Category deleted successfully' });
   } catch (error) {
