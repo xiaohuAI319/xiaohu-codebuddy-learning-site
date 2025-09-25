@@ -8,6 +8,7 @@ import User from '../models/User';
 import MembershipTier from '../models/MembershipTier';
 import { auth, optionalAuth, AuthRequest } from '../middleware/auth';
 import { checkMembershipPermission } from '../middleware/membership';
+import { filterWorksList, filterWorkContent, getUserLevelValue, canViewWork } from '../utils/contentFilter';
 
 const router = express.Router();
 
@@ -82,36 +83,34 @@ router.get('/', optionalAuth, async (req: AuthRequest, res: express.Response): P
       offset: offset
     });
 
-    // 根据用户权限过滤作品
+    // 获取用户信息和等级
+    let user = null;
+    let userLevel = getUserLevelValue(undefined, false);
+    let isAdmin = false;
+
     if (req.user) {
-      const user = await User.findByPk(req.user.userId, {
+      user = await User.findByPk(req.user.userId, {
         include: [{ model: MembershipTier, as: 'membershipTier' }]
       });
       
-      // 管理员可以看到所有作品
-      if (user && user.role !== 'admin') {
-        works = works.filter((work: any) => work.visibility === 'public');
+      if (user) {
+        userLevel = getUserLevelValue(user.currentLevel, true);
+        isAdmin = user.role === 'admin';
       }
-    } else {
-      works = works.filter((work: any) => work.visibility === 'public');
     }
+
+    // 过滤可见作品
+    const visibleWorks = works.filter((work: any) => 
+      canViewWork(work, userLevel, isAdmin, user?.id === work.author)
+    );
+
+    // 根据用户等级过滤内容
+    const filteredWorks = filterWorksList(visibleWorks, userLevel, isAdmin);
 
     const total = await Work.count({ where: whereClause });
 
     res.json({
-      works: works.map((work: any) => ({
-        id: work.id,
-        title: work.title,
-        description: work.description,
-        coverImage: work.coverImage,
-        category: work.category,
-        bootcamp: work.bootcamp,
-        votes: work.votes,
-        isPinned: work.isPinned,
-        visibility: work.visibility,
-        createdAt: work.createdAt,
-        author: work.author
-      })),
+      works: filteredWorks,
       pagination: {
         current: Number(page),
         total: Math.ceil(total / Number(limit)),
@@ -142,24 +141,39 @@ router.get('/:id', optionalAuth, async (req: AuthRequest, res: express.Response)
       return;
     }
 
+    // 获取用户信息和等级
+    let user = null;
+    let userLevel = getUserLevelValue(undefined, false);
+    let isAdmin = false;
+    let isAuthor = false;
+
+    if (req.user) {
+      user = await User.findByPk(req.user.userId, {
+        include: [{ model: MembershipTier, as: 'membershipTier' }]
+      });
+      
+      if (user) {
+        userLevel = getUserLevelValue(user.currentLevel, true);
+        isAdmin = user.role === 'admin';
+        isAuthor = user.id === work.author;
+      }
+    }
+
     // 检查访问权限
-    if (work.visibility === 'private') {
+    if (!canViewWork(work, userLevel, isAdmin, isAuthor)) {
       if (!req.user) {
         res.status(403).json({ error: '需要登录才能查看此作品' });
         return;
-      }
-
-      const user = await User.findByPk(req.user.userId, {
-        include: [{ model: MembershipTier, as: 'membershipTier' }]
-      });
-
-      if (!user || (user.role !== 'admin' && work.author !== req.user.userId)) {
+      } else {
         res.status(403).json({ error: '无权查看此作品' });
         return;
       }
     }
 
-    res.json(work);
+    // 根据用户等级过滤内容
+    const filteredWork = filterWorkContent(work, userLevel, isAdmin);
+
+    res.json(filteredWork);
   } catch (error) {
     console.error('获取作品详情失败:', error);
     res.status(500).json({ error: '获取作品详情失败' });
@@ -193,7 +207,7 @@ router.post('/', [
       return;
     }
 
-    if (!req.body.link && (!files.htmlFile || files.htmlFile.length === 0)) {
+    if (!req.body.workUrl && (!files.htmlFile || files.htmlFile.length === 0)) {
       res.status(400).json({ error: '必须提供作品链接或上传HTML文件' });
       return;
     }
@@ -207,11 +221,17 @@ router.post('/', [
       coverImage: files.coverImage[0].path,
       author: req.user!.userId,
       votes: 0,
-      isPinned: false
+      isPinned: false,
+      // 分层内容
+      previewContent: req.body.previewContent || null,
+      basicContent: req.body.basicContent || null,
+      advancedContent: req.body.advancedContent || null,
+      premiumContent: req.body.premiumContent || null,
+      sourceCode: req.body.sourceCode || null
     };
 
-    if (req.body.link) {
-      workData.link = req.body.link;
+    if (req.body.workUrl) {
+      workData.link = req.body.workUrl;
     }
 
     if (files.htmlFile && files.htmlFile.length > 0) {

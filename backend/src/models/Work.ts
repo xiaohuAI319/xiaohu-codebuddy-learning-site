@@ -15,6 +15,12 @@ export interface WorkAttributes {
   votes: number;
   isPinned: boolean;
   visibility: 'public' | 'private';
+  // 分层内容字段
+  previewContent?: string;    // 所有人可见的预览内容
+  basicContent?: string;      // 学员及以上可见的基础内容
+  advancedContent?: string;   // 会员及以上可见的高级内容
+  premiumContent?: string;    // 高级会员及以上可见的高端内容
+  sourceCode?: string;        // 源码内容，根据等级控制显示
   createdAt: Date;
   updatedAt: Date;
 }
@@ -36,6 +42,12 @@ class Work extends Model<WorkAttributes, WorkCreationAttributes> implements Work
   public votes!: number;
   public isPinned!: boolean;
   public visibility!: 'public' | 'private';
+  // 分层内容字段
+  public previewContent?: string;
+  public basicContent?: string;
+  public advancedContent?: string;
+  public premiumContent?: string;
+  public sourceCode?: string;
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 
@@ -119,6 +131,32 @@ Work.init(
       type: DataTypes.ENUM('public', 'private'),
       allowNull: false,
       defaultValue: 'public',
+    },
+    // 分层内容字段
+    previewContent: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      comment: '所有人可见的预览内容',
+    },
+    basicContent: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      comment: '学员及以上可见的基础内容',
+    },
+    advancedContent: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      comment: '会员及以上可见的高级内容',
+    },
+    premiumContent: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      comment: '高级会员及以上可见的高端内容',
+    },
+    sourceCode: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      comment: '源码内容，根据用户等级控制显示',
     },
     createdAt: {
       type: DataTypes.DATE,

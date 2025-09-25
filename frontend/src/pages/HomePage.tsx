@@ -1,8 +1,10 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRightIcon, StarIcon, UsersIcon, AcademicCapIcon } from '@heroicons/react/24/outline';
+import { useAuth } from '../contexts/AuthContext';
 
 const HomePage: React.FC = () => {
+  const { user } = useAuth();
   const features = [
     {
       icon: AcademicCapIcon,
@@ -140,17 +142,26 @@ const HomePage: React.FC = () => {
             加入我们的学习社区，与优秀的学员一起成长，展示你的作品，获得认可
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            {!user ? (
+              <Link
+                to="/register"
+                className="inline-flex items-center px-8 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                立即注册
+              </Link>
+            ) : (
+              <Link
+                to="/upload"
+                className="inline-flex items-center px-8 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                上传作品
+              </Link>
+            )}
             <Link
-              to="/register"
-              className="inline-flex items-center px-8 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              立即注册
-            </Link>
-            <Link
-              to="/upload"
+              to="/works"
               className="inline-flex items-center px-8 py-3 border-2 border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors"
             >
-              上传作品
+              浏览作品
             </Link>
           </div>
         </div>

@@ -10,12 +10,12 @@ const UploadPage: React.FC = () => {
     category: 'regular',
     tags: '',
     workUrl: '',
-    visibility: 'public',
-    requiredLevel: '学员',
+    // 分层内容
     previewContent: '',
     basicContent: '',
     advancedContent: '',
-    premiumContent: ''
+    premiumContent: '',
+    sourceCode: ''
   });
   const [coverImage, setCoverImage] = useState<File | null>(null);
   const [htmlFile, setHtmlFile] = useState<File | null>(null);
@@ -246,13 +246,18 @@ const UploadPage: React.FC = () => {
 
         {/* 内容分层 */}
         <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">内容分层设置</h2>
-          <p className="text-gray-600 mb-4">根据会员等级设置不同的内容展示层级</p>
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">内容分层</h2>
+          <p className="text-gray-600 mb-6">
+            系统会根据用户的会员等级自动显示相应的内容。您可以为不同等级的用户提供不同深度的内容。
+          </p>
           
           <div className="space-y-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                预览内容（所有人可见）
+                <span className="flex items-center">
+                  预览内容
+                  <span className="ml-2 px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">所有人可见</span>
+                </span>
               </label>
               <textarea
                 name="previewContent"
@@ -266,84 +271,73 @@ const UploadPage: React.FC = () => {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                基础内容（学员及以上可见）
+                <span className="flex items-center">
+                  基础内容
+                  <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">学员及以上可见</span>
+                </span>
               </label>
               <textarea
                 name="basicContent"
                 value={formData.basicContent}
                 onChange={handleChange}
-                rows={3}
-                placeholder="详细的作品说明、技术要点等..."
+                rows={4}
+                placeholder="详细的作品说明、技术要点、实现思路等..."
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                高级内容（会员及以上可见）
+                <span className="flex items-center">
+                  高级内容
+                  <span className="ml-2 px-2 py-1 bg-purple-100 text-purple-800 text-xs rounded-full">会员及以上可见</span>
+                </span>
               </label>
               <textarea
                 name="advancedContent"
                 value={formData.advancedContent}
                 onChange={handleChange}
-                rows={3}
-                placeholder="深入的技术分析、实现思路等..."
+                rows={4}
+                placeholder="深入的技术分析、架构设计、优化方案等..."
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                高端内容（高级会员及以上可见）
+                <span className="flex items-center">
+                  高端内容
+                  <span className="ml-2 px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full">高级会员及以上可见</span>
+                </span>
               </label>
               <textarea
                 name="premiumContent"
                 value={formData.premiumContent}
                 onChange={handleChange}
-                rows={3}
-                placeholder="核心技术秘籍、商业化思路等..."
+                rows={4}
+                placeholder="核心技术秘籍、商业化思路、行业洞察等..."
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
-          </div>
-        </div>
-
-        {/* 权限设置 */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">权限设置</h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                可见性
-              </label>
-              <select
-                name="visibility"
-                value={formData.visibility}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="public">公开</option>
-                <option value="members_only">仅会员可见</option>
-              </select>
-            </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                最低访问等级
+                <span className="flex items-center">
+                  源码内容
+                  <span className="ml-2 px-2 py-1 bg-red-100 text-red-800 text-xs rounded-full">会员级别不可见</span>
+                </span>
               </label>
-              <select
-                name="requiredLevel"
-                value={formData.requiredLevel}
+              <textarea
+                name="sourceCode"
+                value={formData.sourceCode}
                 onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="学员">学员</option>
-                <option value="会员">会员</option>
-                <option value="高级会员">高级会员</option>
-                <option value="共创">共创</option>
-                <option value="讲师">讲师</option>
-              </select>
+                rows={6}
+                placeholder="完整的源代码、关键算法实现等..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+              />
+              <p className="text-sm text-gray-500 mt-1">
+                注意：会员级别的用户无法查看源码内容，学员、高级会员、共创、讲师可以查看
+              </p>
             </div>
           </div>
         </div>
