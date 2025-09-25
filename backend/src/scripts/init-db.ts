@@ -7,9 +7,9 @@ const connectDB = async () => {
     await sequelize.authenticate();
     console.log('✅ SQLite数据库连接成功');
     
-    // 同步数据库表结构
-    await sequelize.sync({ force: false });
-    console.log('✅ 数据库表结构同步完成');
+    // 同步数据库表结构 - 强制重建以确保表结构正确
+    await sequelize.sync({ force: true });
+    console.log('✅ 数据库表结构同步完成（强制重建）');
   } catch (error) {
     console.error('❌ 数据库连接失败:', error);
     process.exit(1);
