@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   MagnifyingGlassIcon,
   EyeIcon,
@@ -18,10 +18,11 @@ interface Work {
   repositoryUrl?: string;
   fileUrl?: string;
   imageUrl?: string;
-  isApproved: boolean;
+  // 审核状态暂用 visibility 映射
+  visibility?: 'public' | 'private';
   createdAt: string;
   updatedAt: string;
-  User: {
+  User?: {
     id: number;
     username: string;
     nickname: string;
@@ -58,11 +59,9 @@ const AdminWorksPage: React.FC = () => {
     { value: 'rejected', label: '已拒绝' }
   ];
 
-  useEffect(() => {
-    fetchWorks();
-  }, [pagination.current, searchTerm, selectedStatus, selectedLevel]);
+  // 将 useEffect 放在 fetchWorks 定义之后，避免“使用前声明”错误
 
-  const fetchWorks = async () => {
+  const fetchWorks = useCallback(async () => {
     try {
       setLoading(true);
       const token = localStorage.getItem('token');
@@ -82,15 +81,47 @@ const AdminWorksPage: React.FC = () => {
 
       const data = await response.json();
       if (data.success) {
-        setWorks(data.data.works);
-        setPagination(data.data.pagination);
+        const mapped = (Array.isArray(data.data?.works) ? data.data.works : []).map((w: any) => {
+          const author = w.authorUser || w.User || null;
+          return {
+            id: w.id,
+            title: w.title,
+            description: w.description || '',
+            tags: Array.isArray(w.tags) ? w.tags : [],
+            repositoryUrl: w.repositoryUrl,
+            fileUrl: w.fileUrl,
+            imageUrl: w.imageUrl,
+            visibility: (w.visibility === 'private' ? 'private' : 'public'),
+            createdAt: w.createdAt,
+            updatedAt: w.updatedAt,
+            User: author ? {
+              id: author.id,
+              username: author.username || author.email || '',
+              nickname: author.nickname || '未知作者',
+              currentLevel: author.currentLevel || '学员'
+            } : undefined
+          } as Work;
+        });
+        setWorks(mapped);
+        const incoming = data.data.pagination;
+        setPagination(prev => (
+          prev.current !== incoming.current ||
+          prev.limit !== incoming.limit ||
+          prev.total !== incoming.total ||
+          prev.count !== incoming.count
+        ) ? incoming : prev);
       }
     } catch (error) {
       console.error('获取作品列表失败:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [pagination, searchTerm, selectedStatus, selectedLevel]);
+
+  // 现在在定义之后调用
+  useEffect(() => {
+    fetchWorks();
+  }, [fetchWorks]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -123,8 +154,33 @@ const AdminWorksPage: React.FC = () => {
     }
   };
 
+  // 预览逻辑：优先跳外链；其次跳生产环境 HTML；否则使用模态框
+  const handlePreview = (work: Work) => {
+    // 1) 外部仓库/URL
+    if (work.repositoryUrl && /^https?:\/\//i.test(work.repositoryUrl)) {
+      window.open(work.repositoryUrl, '_blank');
+      return;
+    }
+    // 2) HTML 文件：根据 fileUrl 推断文件名并拼接生产环境地址
+    if (work.fileUrl) {
+      // 提取文件名（兼容 /path/to/file.html 或 http(s)://.../file.html）
+      const fileNameMatch = work.fileUrl.match(/([^\/\\]+\.html?)$/i);
+      const fileName = fileNameMatch ? fileNameMatch[1] : null;
+      if (fileName) {
+        // TODO: 将以下两项替换为你的真实生产环境配置
+        const PROD_HOST = 'http://xxx.xxx.xx.xx';
+        const PROJECT_SUBDIR = '/这个项目的子目录';
+        const target = `${PROD_HOST}${PROJECT_SUBDIR}/${fileName}`;
+        window.open(target, '_blank');
+        return;
+      }
+    }
+    // 3) 其他情况：回退到模态框预览
+    setPreviewWork(work);
+  };
+
   const handleWorkDelete = async (workId: number) => {
-    if (!confirm('确定要删除这个作品吗？此操作不可恢复！')) {
+    if (!window.confirm('确定要删除这个作品吗？此操作不可恢复！')) {
       return;
     }
 
@@ -156,31 +212,27 @@ const AdminWorksPage: React.FC = () => {
       return;
     }
 
-    if (action === 'delete' && !confirm('确定要删除选中的作品吗？此操作不可恢复！')) {
+    if (action === 'delete' && !window.confirm('确定要删除选中的作品吗？此操作不可恢复！')) {
       return;
     }
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/admin/works/batch', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          workIds: selectedWorks,
-          action
-        })
-      });
-
-      const data = await response.json();
-      if (data.success) {
+      // 后端未提供 /api/admin/works/batch，降级为并行逐条操作
+      if (action === 'delete') {
+        const results = await Promise.allSettled(selectedWorks.map(id =>
+          fetch(`/api/admin/works/${id}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${token}` }
+          }).then(r => r.json())
+        ));
+        const okCount = results.filter(r => r.status === 'fulfilled' && (r as any).value?.success).length;
+        const failCount = selectedWorks.length - okCount;
         setSelectedWorks([]);
         fetchWorks();
-        alert(data.message);
+        alert(`批量删除完成：成功 ${okCount} 条，失败 ${failCount} 条`);
       } else {
-        alert(data.error || '操作失败');
+        alert('当前未提供作品的批量审核接口，请逐条操作或后端实现 /api/admin/works/batch');
       }
     } catch (error) {
       console.error('批量操作失败:', error);
@@ -382,14 +434,14 @@ const AdminWorksPage: React.FC = () => {
                     <div className="flex items-center space-x-2">
                       <UserIcon className="w-4 h-4 text-gray-400" />
                       <div>
-                        <div className="text-sm font-medium text-gray-900">{work.User.nickname}</div>
-                        <div className="text-xs text-gray-500">{work.User.currentLevel}</div>
+                        <div className="text-sm font-medium text-gray-900">{work.User?.nickname ?? '未知作者'}</div>
+                        <div className="text-xs text-gray-500">{work.User?.currentLevel ?? '学员'}</div>
                       </div>
                     </div>
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex flex-wrap gap-1">
-                      {work.tags.map((tag, index) => (
+                      {Array.isArray(work.tags) ? work.tags.map((tag, index) => (
                         <span
                           key={index}
                           className="inline-flex items-center px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded-full"
@@ -397,18 +449,18 @@ const AdminWorksPage: React.FC = () => {
                           <TagIcon className="w-3 h-3 mr-1" />
                           {tag}
                         </span>
-                      ))}
+                      )) : null}
                     </div>
                   </td>
                   <td className="px-6 py-4">
                     <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                      work.isApproved === null 
-                        ? 'bg-yellow-100 text-yellow-800' 
-                        : work.isApproved 
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-red-100 text-red-800'
+                      work.visibility === 'public'
+                        ? 'bg-green-100 text-green-800'
+                        : work.visibility === 'private'
+                          ? 'bg-red-100 text-red-800'
+                          : 'bg-yellow-100 text-yellow-800'
                     }`}>
-                      {work.isApproved === null ? '待审核' : work.isApproved ? '已通过' : '已拒绝'}
+                      {work.visibility === 'public' ? '已通过' : work.visibility === 'private' ? '已拒绝' : '待审核'}
                     </span>
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-500">
@@ -420,13 +472,12 @@ const AdminWorksPage: React.FC = () => {
                   <td className="px-6 py-4">
                     <div className="flex items-center space-x-2">
                       <button
-                        onClick={() => setPreviewWork(work)}
+                        onClick={() => handlePreview(work)}
                         className="text-blue-600 hover:text-blue-800"
                         title="预览"
                       >
                         <EyeIcon className="w-4 h-4" />
                       </button>
-                      {work.isApproved === null && (
                         <>
                           <button
                             onClick={() => handleWorkApproval(work.id, true)}
@@ -443,7 +494,6 @@ const AdminWorksPage: React.FC = () => {
                             <XMarkIcon className="w-4 h-4" />
                           </button>
                         </>
-                      )}
                       <button
                         onClick={() => handleWorkDelete(work.id)}
                         className="text-red-600 hover:text-red-800"
@@ -520,7 +570,7 @@ const AdminWorksPage: React.FC = () => {
                 <p className="text-gray-700 whitespace-pre-wrap">{previewWork.description}</p>
               </div>
               
-              {previewWork.tags.length > 0 && (
+              {Array.isArray(previewWork.tags) && previewWork.tags.length > 0 && (
                 <div>
                   <h3 className="font-medium text-gray-900 mb-2">标签</h3>
                   <div className="flex flex-wrap gap-2">
@@ -553,7 +603,7 @@ const AdminWorksPage: React.FC = () => {
               <div className="grid grid-cols-2 gap-4 text-sm text-gray-600">
                 <div>
                   <span className="font-medium">作者：</span>
-                  {previewWork.User.nickname} ({previewWork.User.currentLevel})
+                  {(previewWork.User?.nickname ?? '未知作者')} ({previewWork.User?.currentLevel ?? '学员'})
                 </div>
                 <div>
                   <span className="font-medium">提交时间：</span>
@@ -562,7 +612,6 @@ const AdminWorksPage: React.FC = () => {
               </div>
             </div>
             
-            {previewWork.isApproved === null && (
               <div className="flex justify-end space-x-3 mt-6 pt-4 border-t">
                 <button
                   onClick={() => {
@@ -583,7 +632,6 @@ const AdminWorksPage: React.FC = () => {
                   通过
                 </button>
               </div>
-            )}
           </div>
         </div>
       )}

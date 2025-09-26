@@ -23,37 +23,9 @@ const Sidebar: React.FC = () => {
   return (
     <aside className="fixed left-0 top-16 h-full w-64 bg-white shadow-lg border-r border-gray-200">
       <div className="p-6">
-        {/* 创始人介绍 */}
-        <div className="mb-8">
-          <div className="flex items-center space-x-3 mb-4">
-            <div className="w-12 h-12 bg-primary-100 rounded-full flex items-center justify-center">
-              <UserIcon className="w-6 h-6 text-primary-600" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-gray-900">创始人小虎</h3>
-              <p className="text-sm text-gray-500">AI编程导师</p>
-            </div>
-          </div>
-          <p className="text-sm text-gray-600 leading-relaxed">
-            专注AI编程教育，致力于帮助更多人掌握AI编程技能，已培养50+优秀学员。
-          </p>
-        </div>
 
-        {/* AI赋能中心介绍 */}
-        <div className="mb-8">
-          <div className="flex items-center space-x-3 mb-4">
-            <div className="w-12 h-12 bg-secondary-100 rounded-full flex items-center justify-center">
-              <BuildingOfficeIcon className="w-6 h-6 text-secondary-600" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-gray-900">小虎AI赋能中心</h3>
-              <p className="text-sm text-gray-500">专业AI培训机构</p>
-            </div>
-          </div>
-          <p className="text-sm text-gray-600 leading-relaxed">
-            提供系统化的AI编程培训课程，包括基础入门、进阶实战、项目实践等多个阶段。
-          </p>
-        </div>
+
+
 
         {/* 导航菜单 */}
         <nav className="space-y-2">

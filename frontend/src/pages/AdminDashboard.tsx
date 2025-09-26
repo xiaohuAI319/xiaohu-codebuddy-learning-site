@@ -128,7 +128,7 @@ const AdminDashboard: React.FC = () => {
       {/* 页面标题 */}
       <div>
         <h1 className="text-2xl font-bold text-gray-900">管理后台</h1>
-        <p className="text-gray-600">欢迎回到小虎CodeBuddy学习站管理后台</p>
+        <p className="text-gray-600">欢迎回到小虎AI编程学习站管理后台</p>
       </div>
 
       {/* 统计卡片 */}

@@ -14,9 +14,7 @@ export const checkMembershipPermission = (permission: string) => {
         return;
       }
 
-      const user = await User.findByPk(req.user.userId, {
-        include: [{ model: MembershipTier, as: 'membershipTier' }]
-      });
+      const user = await User.findByPk(req.user.userId);
 
       if (!user) {
         res.status(401).json({ error: 'User not found' });

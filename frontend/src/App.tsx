@@ -3,7 +3,9 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import Layout from './components/Layout';
 import HomePage from './pages/HomePage';
+import FounderPage from './pages/FounderPage';
 import WorksPage from './pages/WorksPage';
+import WorksDetailPage from './pages/WorksDetailPage';
 import UploadPage from './pages/UploadPage';
 import AdminPage from './pages/AdminPage';
 import MembershipPage from './pages/MembershipPage';
@@ -30,7 +32,9 @@ function App() {
               <Route index element={<HomePage />} />
               <Route path="works" element={<WorksPage />} />
               <Route path="works/:category" element={<WorksPage />} />
+              <Route path="work/:slug" element={<WorksDetailPage />} />
               <Route path="membership" element={<MembershipPage />} />
+              <Route path="founder" element={<FounderPage />} />
               
               {/* 需要登录的页面 */}
               <Route path="upload" element={

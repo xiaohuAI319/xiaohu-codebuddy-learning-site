@@ -384,3 +384,47 @@ cd backend && npm run init-db
   - 安全性: JWT认证和权限验证
 - **修复问题**: CORS配置、TypeScript类型错误、端口冲突
 - **测试状态**: 基础功能验证完成，待完整性测试
+
+---
+
+## 2025/9/26 更新记录（22:00）
+
+### 今日完成
+- 作品详情链接迁移为不可枚举 slug
+  - Work 模型新增 slug 字段；创建作品自动生成随机 slug
+  - 新增 GET /api/works/slug/:slug，复用鉴权与内容过滤逻辑
+  - 兼容旧数据：当 slug 查询不到且参数为纯数字时回退按 ID 查询
+- 前端详情页与路由
+  - 路由改为 /work/:slug；WorksPage 跳转优先使用 work.slug
+  - WorksDetailPage 按 slug 拉取详情，图片 URL 构造与列表页一致（开发相对 /uploads，生产拼接 apiOrigin）
+  - 详情页按钮文案改为“查看作品”
+- 开发代理与跨域
+  - 移除 CRA 的字符串 proxy，新增 setupProxy.js 仅代理 /api 与 /uploads，避免 /favicon.ico 等误代理
+  - 修复 ECONNREFUSED：确保后端 5000 端口启动后再启动前端
+- 数据库与表结构
+  - 在开发环境普通 sync 后，使用 PRAGMA/ALTER 方式安全添加 Works.slug 列与唯一索引，避免 SQLite alter 引发错误
+- 其他修复
+  - 端口占用处理（释放 5000 端口后重启）
+  - 修复 TS/ESLint 部分问题（依赖数组与正则转义）
+
+### 关键变更文件
+- backend/src/models/Work.ts（新增 slug 字段）
+- backend/src/index.ts（sync 后安全添加 slug 列与唯一索引）
+- backend/src/routes/works.ts（新增 /slug/:slug 与数字回退；统一鉴权与过滤）
+- frontend/src/App.tsx（/work/:slug 路由）
+- frontend/src/pages/WorksPage.tsx（跳转使用 slug）
+- frontend/src/pages/WorksDetailPage.tsx（按 slug 拉取、图片策略一致、按钮文案）
+- frontend/src/setupProxy.js（仅代理 /api 与 /uploads）
+
+### 遇到并解决的问题
+- SQLite “no such column: slug” → 改为 sync 后通过 SQL 安全增列与索引
+- 前端代理误导所有路径 → 改用按路径代理，避免资源误代理导致 ECONNREFUSED
+- 旧数据无 slug 导致详情 404 → 按数字 ID 回退兼容
+
+### 下一步计划
+- 为历史作品批量生成 slug 的脚本（一次性迁移）
+- 清理剩余 ESLint 警告（useCallback 依赖、no-useless-escape）
+- 覆盖作品上传、会员、投票的场景测试
+
+**本次更新作者**: GPT 助手  
+**最后更新**: 2025年9月26日 22:00

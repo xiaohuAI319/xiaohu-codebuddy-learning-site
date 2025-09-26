@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { StarIcon, EyeIcon, LockClosedIcon, FolderIcon } from '@heroicons/react/24/outline';
 import { StarIcon as StarSolidIcon } from '@heroicons/react/24/solid';
 import MembershipBadge from '../components/MembershipBadge';
@@ -7,6 +7,7 @@ import UpgradePrompt from '../components/UpgradePrompt';
 
 interface Work {
   id: string;
+  slug?: string;
   title: string;
   description: string;
   author: {
@@ -39,6 +40,7 @@ interface User {
 
 const WorksPage: React.FC = () => {
   const { category } = useParams();
+  const navigate = useNavigate();
   const [selectedCategory, setSelectedCategory] = useState(category || 'all');
   const [sortBy, setSortBy] = useState('votes');
   const [works, setWorks] = useState<Work[]>([]);
@@ -53,17 +55,12 @@ const WorksPage: React.FC = () => {
   const categories = [
     { id: 'all', name: '全部作品' },
     { id: 'regular', name: '平时作品' },
-    { id: 'camp1', name: 'AI编程训练营第一期' },
-    { id: 'camp2', name: 'AI编程训练营第二期' },
-    { id: 'overseas1', name: 'AI编程出海训练营第一期' },
+    { id: 'camp1', name: 'AI编程训练营即将开启' }
   ];
 
-  useEffect(() => {
-    fetchWorks();
-    fetchUserInfo();
-  }, [selectedCategory, sortBy]);
 
-  const fetchWorks = async () => {
+
+  const fetchWorks = useCallback(async () => {
     try {
       const token = localStorage.getItem('token');
       const headers: any = {};
@@ -71,27 +68,88 @@ const WorksPage: React.FC = () => {
         headers.Authorization = `Bearer ${token}`;
       }
 
-      const response = await fetch(`/api/works?category=${selectedCategory}&sort=${sortBy}`, {
+      // 构建查询参数：all 不传 category；regular 映射为 web
+      const params = new URLSearchParams();
+      params.set('sort', sortBy);
+      if (selectedCategory !== 'all') {
+        const mapped = selectedCategory === 'regular' ? 'web' : selectedCategory;
+        params.set('category', mapped);
+      }
+      const response = await fetch(`/api/works?${params.toString()}`, {
         headers
       });
       const data = await response.json();
-      if (data.success) {
-        // 根据用户权限过滤作品
-        const filteredWorks = data.data.filter((work: Work) => {
-          if (work.visibility === 'public') return true;
-          if (!user) return false;
-          return canUserAccessWork(work);
-        });
-        setWorks(filteredWorks);
+
+      // 仅按统一结构解析
+      if (!data?.success || !Array.isArray(data.data)) {
+        setWorks([]);
+        return;
       }
+
+      // 计算后端源（开发时 3000 -> 5000）
+      const apiOrigin = window.location.origin.includes(':3000')
+        ? window.location.origin.replace(':3000', ':5000')
+        : window.location.origin;
+
+      const list: Work[] = data.data.map((w: any) => {
+        const rawPath = String(w.coverImage || '').replace(/\\/g, '/');
+        const normPath = rawPath.replace(/^\/+/, '');
+        const coverUrl = normPath.startsWith('http')
+          ? normPath
+          : (window.location.origin.includes(':3000') ? `/${normPath}` : `${apiOrigin}/${normPath}`);
+
+        // 计算预览链接：优先使用绝对URL，其次使用后端保存的htmlFile相对路径并拼接动态主机
+        const previewSrc = (w.link && /^https?:\/\//i.test(String(w.link))) ? String(w.link) : String(w.htmlFile || '');
+        const previewPath = previewSrc.replace(/\\/g, '/').replace(/^\/+/, '');
+        // 从任意路径中提取静态服务片段（uploads/...），避免将磁盘路径拼到 URL
+        const uploadsMatch = previewPath.match(/uploads\/[^\/\\]+\/[^\/\\]+\.(html?)$/i)
+          || previewPath.match(/uploads\/.*\.(html?)$/i);
+        const pathForUrl = uploadsMatch ? uploadsMatch[0].replace(/^\/+/, '') : previewPath;
+        const previewUrl = previewSrc.startsWith('http')
+          ? previewSrc
+          : (pathForUrl ? `${apiOrigin}/${pathForUrl}` : '');
+
+        return {
+          id: String(w.id),
+          slug: String(w.slug || w.id),
+          title: w.title,
+          description: w.description,
+          author: (w.author && typeof w.author === 'object') ? w.author : { nickname: '作者', currentLevel: '学员' },
+          category: (w.category === 'web' ? 'regular' : (w.category || 'regular')),
+          tags: Array.isArray(w.tags) ? w.tags : [],
+          coverImage: coverUrl,
+          votes: Number(w.votes || 0),
+          views: Number(w.views || 0),
+          isTopPinned: Boolean(w.isTopPinned || w.isPinned),
+          requiredLevel: w.requiredLevel || '学员',
+          visibility: (w.visibility === 'members_only' ? 'members_only' : 'public'),
+          content: {
+            preview: previewUrl,
+            basic: w.content?.basic,
+            advanced: w.content?.advanced,
+            premium: w.content?.premium,
+            sourceCode: w.content?.sourceCode
+          },
+          createdAt: w.createdAt || new Date().toISOString()
+        } as Work;
+      });
+
+      // 根据用户权限过滤作品
+      const filteredWorks = list.filter((work: Work) => {
+        if (work.visibility === 'public') return true;
+        if (!user) return false;
+        return canUserAccessWork(work);
+      });
+
+      setWorks(filteredWorks);
     } catch (error) {
       console.error('获取作品失败:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedCategory, sortBy, user]);
 
-  const fetchUserInfo = async () => {
+  const fetchUserInfo = useCallback(async () => {
     try {
       const token = localStorage.getItem('token');
       if (!token) return;
@@ -108,7 +166,15 @@ const WorksPage: React.FC = () => {
     } catch (error) {
       console.error('获取用户信息失败:', error);
     }
-  };
+  }, []);
+  
+  useEffect(() => {
+    fetchWorks();
+  }, [fetchWorks]);
+
+  useEffect(() => {
+    fetchUserInfo();
+  }, [fetchUserInfo]);
 
   const canUserAccessWork = (work: Work): boolean => {
     if (!user) return work.visibility === 'public';
@@ -171,6 +237,8 @@ const WorksPage: React.FC = () => {
       console.error('投票失败:', error);
     }
   };
+
+
 
   const handleViewContent = (work: Work, contentLevel: string) => {
     if (!canUserAccessContent(work, contentLevel)) {
@@ -323,10 +391,10 @@ const WorksPage: React.FC = () => {
               {/* 内容访问按钮 */}
               <div className="flex gap-2 mb-3">
                 <button
-                  onClick={() => handleViewContent(work, 'preview')}
-                  className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded hover:bg-green-200"
+                  onClick={() => navigate(`/work/${work.slug || work.id}`)}
+                  className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700"
                 >
-                  预览
+                  查看详情
                 </button>
                 
                 {work.content.basic && (

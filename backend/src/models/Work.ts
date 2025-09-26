@@ -7,6 +7,7 @@ export interface WorkAttributes {
   title: string;
   description: string;
   coverImage: string;
+  slug?: string;
   htmlFile?: string;
   link?: string;
   category: 'web' | 'mobile' | 'desktop' | 'ai' | 'other';
@@ -30,6 +31,7 @@ class Work extends Model<WorkAttributes, WorkCreationAttributes> implements Work
   public title!: string;
   public description!: string;
   public coverImage!: string;
+  public slug?: string;
   public htmlFile?: string;
   public link?: string;
   public category!: 'web' | 'mobile' | 'desktop' | 'ai' | 'other';
@@ -77,6 +79,12 @@ Work.init(
       validate: {
         notEmpty: true,
       },
+    },
+    slug: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+      unique: true,
+      comment: '用于不可枚举的详情页链接',
     },
     htmlFile: {
       type: DataTypes.STRING(500),

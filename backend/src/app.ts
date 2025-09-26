@@ -20,7 +20,7 @@ app.use(express.urlencoded({ extended: true }));
 // 静态文件服务
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-// 路由
+// API路由
 app.use('/api/auth', authRoutes);
 app.use('/api/works', worksRoutes);
 app.use('/api/admin', adminRoutes);
@@ -29,10 +29,19 @@ app.use('/api/membership', membershipRoutes);
 // 健康检查
 app.get('/api/health', (req, res) => {
   res.json({
-    success: true,
-    message: '服务运行正常',
-    timestamp: new Date().toISOString()
+    status: 'OK',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development',
+    database: 'SQLite'
   });
+});
+
+// 服务前端静态文件
+app.use(express.static(path.join(__dirname, '../../frontend/build')));
+
+// 所有非API请求都返回前端应用
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../../frontend/build/index.html'));
 });
 
 // 错误处理中间件
@@ -61,17 +70,9 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
     });
   }
   
-  res.status(500).json({
+  return res.status(500).json({
     success: false,
     message: '服务器内部错误'
-  });
-});
-
-// 404处理
-app.use('*', (req, res) => {
-  res.status(404).json({
-    success: false,
-    message: '接口不存在'
   });
 });
 

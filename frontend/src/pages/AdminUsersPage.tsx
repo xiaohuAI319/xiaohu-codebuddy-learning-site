@@ -145,7 +145,7 @@ const AdminUsersPage: React.FC = () => {
       return;
     }
 
-    if (action === 'delete' && !confirm('确定要删除选中的用户吗？此操作不可恢复！')) {
+    if (action === 'delete' && !window.confirm('确定要删除选中的用户吗？此操作不可恢复！')) {
       return;
     }
 

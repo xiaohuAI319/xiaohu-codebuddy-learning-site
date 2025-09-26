@@ -3,6 +3,7 @@ import { body, validationResult } from 'express-validator';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 import Work from '../models/Work';
 import User from '../models/User';
 import MembershipTier from '../models/MembershipTier';
@@ -22,8 +23,9 @@ const storage = multer.diskStorage({
     cb(null, uploadDir);
   },
   filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+    const ext = path.extname(file.originalname).toLowerCase();
+    const randomName = crypto.randomBytes(16).toString('hex') + ext;
+    cb(null, randomName);
   }
 });
 
@@ -74,7 +76,7 @@ router.get('/', optionalAuth, async (req: AuthRequest, res: express.Response): P
       include: [
         {
           model: User,
-          as: 'author',
+          as: 'authorUser',
           attributes: ['id', 'nickname', 'role', 'currentLevel']
         }
       ],
@@ -109,8 +111,19 @@ router.get('/', optionalAuth, async (req: AuthRequest, res: express.Response): P
 
     const total = await Work.count({ where: whereClause });
 
+    // 统一返回结构并映射作者信息
+    const data = filteredWorks.map((w: any) => {
+      const json = typeof w.toJSON === 'function' ? w.toJSON() : w;
+      const authorObj = json.authorUser || null;
+      delete json.authorUser; // 移除中间字段
+      // 将 author 数字外键替换为作者对象
+      json.author = authorObj;
+      return json;
+    });
+
     res.json({
-      works: filteredWorks,
+      success: true,
+      data,
       pagination: {
         current: Number(page),
         total: Math.ceil(total / Number(limit)),
@@ -130,7 +143,7 @@ router.get('/:id', optionalAuth, async (req: AuthRequest, res: express.Response)
       include: [
         {
           model: User,
-          as: 'author',
+          as: 'authorUser',
           attributes: ['id', 'nickname', 'role', 'currentLevel']
         }
       ]
@@ -173,7 +186,16 @@ router.get('/:id', optionalAuth, async (req: AuthRequest, res: express.Response)
     // 根据用户等级过滤内容
     const filteredWork = filterWorkContent(work, userLevel, isAdmin);
 
-    res.json(filteredWork);
+    // 统一返回结构并映射作者信息
+    const json: any = typeof (filteredWork as any).toJSON === 'function' ? (filteredWork as any).toJSON() : filteredWork;
+    const authorObj = json.authorUser || null;
+    delete json.authorUser;
+    json.author = authorObj;
+
+    res.json({
+      success: true,
+      data: json
+    });
   } catch (error) {
     console.error('获取作品详情失败:', error);
     res.status(500).json({ error: '获取作品详情失败' });
@@ -183,7 +205,7 @@ router.get('/:id', optionalAuth, async (req: AuthRequest, res: express.Response)
 // 创建新作品
 router.post('/', [
   auth,
-  checkMembershipPermission('uploadWork'),
+  checkMembershipPermission('canUploadWorks'),
   upload.fields([
     { name: 'coverImage', maxCount: 1 },
     { name: 'htmlFile', maxCount: 1 }
@@ -191,13 +213,21 @@ router.post('/', [
   body('title').trim().isLength({ min: 1, max: 100 }).withMessage('标题长度必须在1-100字符之间'),
   body('description').trim().isLength({ min: 1, max: 500 }).withMessage('描述长度必须在1-500字符之间'),
   body('category').isIn(['web', 'mobile', 'desktop', 'ai', 'other']).withMessage('无效的分类'),
-  body('visibility').isIn(['public', 'private']).withMessage('无效的可见性设置'),
+  body('visibility').optional().isIn(['public', 'private']).withMessage('无效的可见性设置'),
   body('tags').optional().isLength({ max: 500 }).withMessage('标签长度不能超过500字符'),
   body('repositoryUrl').optional().isURL().withMessage('源码仓库链接格式不正确')
 ], async (req: AuthRequest, res: express.Response): Promise<void> => {
   try {
+    // 调试日志
+    console.log('上传请求数据:', {
+      body: req.body,
+      files: req.files,
+      user: req.user
+    });
+
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      console.log('验证错误:', errors.array());
       res.status(400).json({ errors: errors.array() });
       return;
     }
@@ -210,7 +240,7 @@ router.post('/', [
     }
 
     if (!req.body.link && (!files.htmlFile || files.htmlFile.length === 0)) {
-      res.status(400).json({ error: '必须提供作品链接或上传HTML文件' });
+      res.status(400).json({ error: '必须提供绝对URL或上传HTML文件' });
       return;
     }
 
@@ -246,6 +276,9 @@ router.post('/', [
       isPinned: false
     };
 
+    // 自动生成不可枚举 slug（若用户未提供）
+    workData.slug = (req.body.slug && String(req.body.slug).trim()) || crypto.randomBytes(6).toString('hex');
+
     if (req.body.link) {
       workData.link = req.body.link;
     }
@@ -260,7 +293,7 @@ router.post('/', [
       include: [
         {
           model: User,
-          as: 'author',
+          as: 'authorUser',
           attributes: ['id', 'nickname', 'role', 'currentLevel']
         }
       ]
@@ -268,8 +301,27 @@ router.post('/', [
 
     res.status(201).json(createdWork);
   } catch (error) {
-    console.error('创建作品失败:', error);
-    res.status(500).json({ error: '创建作品失败' });
+    const err: any = error as any;
+    const payload: any = {
+      error: '创建作品失败',
+      name: err?.name,
+      message: err?.message
+    };
+    if (err?.errors && Array.isArray(err.errors)) {
+      payload.validation = err.errors.map((e: any) => ({
+        message: e?.message,
+        path: e?.path,
+        type: e?.type,
+        value: e?.value
+      }));
+    }
+    console.error('创建作品失败:', {
+      name: err?.name,
+      message: err?.message,
+      stack: err?.stack,
+      validation: payload.validation
+    });
+    res.status(500).json(payload);
   }
 });
 
@@ -360,7 +412,7 @@ router.put('/:id', [
       include: [
         {
           model: User,
-          as: 'author',
+          as: 'authorUser',
           attributes: ['id', 'nickname', 'role', 'currentLevel']
         }
       ]
@@ -405,7 +457,7 @@ router.delete('/:id', auth, async (req: AuthRequest, res: express.Response): Pro
 });
 
 // 投票
-router.post('/:id/vote', auth, checkMembershipPermission('vote'), async (req: AuthRequest, res: express.Response): Promise<void> => {
+router.post('/:id/vote', auth, checkMembershipPermission('canVote'), async (req: AuthRequest, res: express.Response): Promise<void> => {
   try {
     const work = await Work.findByPk(req.params.id);
     if (!work) {
@@ -472,6 +524,88 @@ router.delete('/:id/pin', auth, async (req: AuthRequest, res: express.Response):
   } catch (error) {
     console.error('取消置顶失败:', error);
     res.status(500).json({ error: '取消置顶失败' });
+  }
+});
+
+/**
+ * 通过 slug 获取作品详情
+ */
+router.get('/slug/:slug', optionalAuth, async (req: AuthRequest, res: express.Response): Promise<void> => {
+  try {
+    let work = await Work.findOne({
+      where: { slug: req.params.slug },
+      include: [
+        {
+          model: User,
+          as: 'authorUser',
+          attributes: ['id', 'nickname', 'role', 'currentLevel']
+        }
+      ]
+    });
+
+    // 兼容旧链接：如果按 slug 未找到且参数是纯数字，回退按 ID 查询
+    if (!work && /^\d+$/.test(req.params.slug)) {
+      work = await Work.findByPk(Number(req.params.slug), {
+        include: [
+          {
+            model: User,
+            as: 'authorUser',
+            attributes: ['id', 'nickname', 'role', 'currentLevel']
+          }
+        ]
+      });
+    }
+
+    if (!work) {
+      res.status(404).json({ error: '作品不存在' });
+      return;
+    }
+
+    // 获取用户信息和等级
+    let user = null;
+    let userLevel = getUserLevelValue(undefined, false);
+    let isAdmin = false;
+    let isAuthor = false;
+
+    if (req.user) {
+      user = await User.findByPk(req.user.userId, {
+        include: [{ model: MembershipTier, as: 'membershipTier' }]
+      });
+      
+      if (user) {
+        userLevel = getUserLevelValue(user.currentLevel, true);
+        isAdmin = user.role === 'admin';
+        isAuthor = user.id === work.author;
+      }
+    }
+
+    // 检查访问权限
+    if (!canViewWork(work, userLevel, isAdmin, isAuthor)) {
+      if (!req.user) {
+        res.status(403).json({ error: '需要登录才能查看此作品' });
+        return;
+      } else {
+        res.status(403).json({ error: '无权查看此作品' });
+        return;
+      }
+    }
+
+    // 根据用户等级过滤内容
+    const filteredWork = filterWorkContent(work, userLevel, isAdmin);
+
+    // 统一返回结构并映射作者信息
+    const json: any = typeof (filteredWork as any).toJSON === 'function' ? (filteredWork as any).toJSON() : filteredWork;
+    const authorObj = json.authorUser || null;
+    delete json.authorUser;
+    json.author = authorObj;
+
+    res.json({
+      success: true,
+      data: json
+    });
+  } catch (error) {
+    console.error('获取作品详情(按slug)失败:', error);
+    res.status(500).json({ error: '获取作品详情失败' });
   }
 });
 

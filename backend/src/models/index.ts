@@ -5,6 +5,8 @@ import MembershipTier from './MembershipTier';
 import Bootcamp from './Bootcamp';
 import Coupon from './Coupon';
 import SerialCode from './SerialCode';
+import OperationLog from './OperationLog';
+import MembershipUpgrade from './MembershipUpgrade';
 
 // 定义模型关联
 User.belongsTo(MembershipTier, { 
@@ -48,6 +50,38 @@ User.hasMany(Work, {
   as: 'works'
 });
 
+// 操作日志关联
+OperationLog.belongsTo(User, { 
+  foreignKey: 'userId', 
+  as: 'user' 
+});
+
+OperationLog.belongsTo(User, { 
+  foreignKey: 'operatorId', 
+  as: 'operator' 
+});
+
+OperationLog.belongsTo(User, { 
+  foreignKey: 'targetUserId', 
+  as: 'targetUser' 
+});
+
+// 会员升级记录关联
+MembershipUpgrade.belongsTo(User, { 
+  foreignKey: 'userId', 
+  as: 'user' 
+});
+
+MembershipUpgrade.belongsTo(User, { 
+  foreignKey: 'operatorId', 
+  as: 'operator' 
+});
+
+MembershipUpgrade.belongsTo(SerialCode, { 
+  foreignKey: 'serialCodeId', 
+  as: 'serialCode' 
+});
+
 // 导出所有模型和数据库连接
 export {
   sequelize,
@@ -56,7 +90,9 @@ export {
   MembershipTier,
   Bootcamp,
   Coupon,
-  SerialCode
+  SerialCode,
+  OperationLog,
+  MembershipUpgrade
 };
 
 export default sequelize;

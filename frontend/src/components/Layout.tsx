@@ -51,7 +51,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         <div className="fixed inset-0 bg-gray-600 bg-opacity-75" onClick={() => setSidebarOpen(false)} />
         <div className="fixed inset-y-0 left-0 flex w-64 flex-col bg-white shadow-xl">
           <div className="flex h-16 items-center justify-between px-4">
-            <h1 className="text-xl font-bold text-gray-900">小虎CodeBuddy学习站</h1>
+            <h1 className="text-xl font-bold text-gray-900">小虎AI编程学习站</h1>
             <button
               type="button"
               className="text-gray-400 hover:text-gray-600"
@@ -104,7 +104,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       <div className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col">
         <div className="flex flex-col flex-grow bg-white border-r border-gray-200 pt-5 pb-4 overflow-y-auto">
           <div className="flex items-center flex-shrink-0 px-4">
-            <h1 className="text-xl font-bold text-gray-900">小虎CodeBuddy学习站</h1>
+            <h1 className="text-xl font-bold text-gray-900">小虎AI编程学习站</h1>
           </div>
           <div className="mt-5 flex-grow flex flex-col">
             <nav className="flex-1 px-2 space-y-1">
@@ -214,6 +214,18 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             </div>
           </div>
         </main>
+        {/* 全站页脚：创始人小虎入口与logo */}
+        <footer className="border-t border-gray-200 bg-white">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 py-6 flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <img src="/logo-xiaohu.png" alt="小虎logo" className="w-8 h-8 rounded bg-white border border-gray-200" />
+              <span className="text-sm text-gray-600">小虎AI编程学习站</span>
+            </div>
+            <Link to="/founder" className="text-sm text-amber-600 hover:text-amber-700 font-medium">
+              认识创始人小虎 →
+            </Link>
+          </div>
+        </footer>
       </div>
     </div>
   );

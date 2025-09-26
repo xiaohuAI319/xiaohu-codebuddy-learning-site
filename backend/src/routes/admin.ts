@@ -414,4 +414,38 @@ router.post('/users/batch', adminAuth, [
   }
 });
 
+/**
+ * 审核作品（通过/拒绝）
+ */
+router.patch('/works/:id/approve', adminAuth, [
+  body('approved').isBoolean().withMessage('approved 必须是布尔值')
+], async (req: AuthRequest, res: express.Response): Promise<void> => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.status(400).json({ errors: errors.array() });
+      return;
+    }
+
+    const work = await Work.findByPk(req.params.id);
+    if (!work) {
+      res.status(404).json({ error: '作品不存在' });
+      return;
+    }
+
+    // 使用 visibility 表示审核状态：public=已通过；private=已拒绝
+    const newVisibility = req.body.approved ? 'public' : 'private';
+    await work.update({ visibility: newVisibility });
+
+    res.json({
+      success: true,
+      message: `作品已${req.body.approved ? '通过' : '拒绝'}`,
+      data: { id: work.id, visibility: work.visibility }
+    });
+  } catch (error) {
+    console.error('审核作品失败:', error);
+    res.status(500).json({ error: '审核作品失败' });
+  }
+});
+
 export default router;

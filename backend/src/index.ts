@@ -1,13 +1,19 @@
+import './config/env';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
-import dotenv from 'dotenv';
+
 import rateLimit from 'express-rate-limit';
 import path from 'path';
+// 初始化模型与关联（副作用导入）
+import './models';
 
 // 导入数据库配置
 import sequelize from './config/database';
+
+// 导入错误处理
+import { errorHandler, AppError, createNotFoundError } from './utils/errorHandler';
 
 // 导入路由
 import authRoutes from './routes/auth';
@@ -18,10 +24,11 @@ import uploadRoutes from './routes/upload';
 import membershipRoutes from './routes/membership';
 import adminRoutes from './routes/admin';
 
-// 加载环境变量
-dotenv.config();
+
 
 const app = express();
+// 信任代理，用于正确识别客户端IP（解决 express-rate-limit 的 X-Forwarded-For 警告）
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 5000;
 
 // 安全中间件
@@ -48,7 +55,9 @@ app.use(morgan('combined'));
 // 请求限制
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15分钟
-  max: 100 // 限制每个IP 15分钟内最多100个请求
+  max: 100, // 限制每个IP 15分钟内最多100个请求
+  // 开发环境跳过限流，避免 React 严格模式/热更新触发 429
+  skip: () => process.env.NODE_ENV !== 'production'
 });
 app.use(limiter);
 
@@ -78,44 +87,21 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// 404处理
-app.use('*', (req, res) => {
-  res.status(404).json({ 
-    error: 'API endpoint not found',
-    path: req.originalUrl 
-  });
+// 服务前端静态文件
+app.use(express.static(path.join(__dirname, '../../frontend/build')));
+
+// 所有非API请求都返回前端应用
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../../frontend/build/index.html'));
+});
+
+// API 404处理 (这个不会被触发，因为上面的通配符会捕获所有请求)
+app.use('/api/*', (req, res, next) => {
+  next(createNotFoundError('API endpoint not found'));
 });
 
 // 全局错误处理
-app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error('Error:', err);
-  
-  if (err.name === 'ValidationError') {
-    return res.status(400).json({
-      error: 'Validation Error',
-      details: err.message
-    });
-  }
-  
-  if (err.name === 'SequelizeValidationError') {
-    return res.status(400).json({
-      error: 'Validation Error',
-      details: err.errors?.map((e: any) => e.message).join(', ') || err.message
-    });
-  }
-  
-  if (err.name === 'SequelizeUniqueConstraintError') {
-    return res.status(409).json({
-      error: 'Duplicate Entry',
-      details: 'Resource already exists'
-    });
-  }
-  
-  return res.status(500).json({
-    error: 'Internal Server Error',
-    message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong'
-  });
-});
+app.use(errorHandler);
 
 // 数据库连接
 const connectDB = async () => {
@@ -127,6 +113,18 @@ const connectDB = async () => {
     if (process.env.NODE_ENV !== 'production') {
       await sequelize.sync();
       console.log('✅ 数据库表结构同步完成');
+      // 确保 Works 表存在 slug 列与唯一索引（SQLite 安全方式）
+      try {
+        const [cols] = await sequelize.query("PRAGMA table_info('Works')");
+        const hasSlug = Array.isArray(cols) && cols.some((c: any) => c.name === 'slug');
+        if (!hasSlug) {
+          await sequelize.query("ALTER TABLE `Works` ADD COLUMN `slug` VARCHAR(100)");
+        }
+        await sequelize.query("CREATE UNIQUE INDEX IF NOT EXISTS `works_slug` ON `Works` (`slug`)");
+        console.log('✅ Works.slug 列与唯一索引已就绪');
+      } catch (e) {
+        console.warn('⚠️ 初始化 Works.slug 列或索引时出现警告（已忽略）:', (e as any)?.message || String(e));
+      }
     }
   } catch (error) {
     console.error('❌ SQLite数据库连接失败:', error);

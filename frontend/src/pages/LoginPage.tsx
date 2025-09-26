@@ -44,7 +44,7 @@ const LoginPage: React.FC = () => {
       <div className="max-w-md w-full space-y-8">
         <div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            登录到小虎CodeBuddy学习站
+            登录到小虎AI编程学习站
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
             还没有账号？{' '}

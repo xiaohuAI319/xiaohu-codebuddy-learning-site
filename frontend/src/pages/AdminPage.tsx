@@ -44,7 +44,7 @@ const AdminPage: React.FC = () => {
       {/* 页面标题 */}
       <div className="text-center">
         <h1 className="text-4xl font-bold text-gray-900 mb-4">管理后台</h1>
-        <p className="text-xl text-gray-600">小虎CodeBuddy学习站 - 系统管理中心</p>
+        <p className="text-xl text-gray-600">小虎AI编程学习站 - 系统管理中心</p>
       </div>
 
       {/* 管理功能卡片 */}

@@ -55,6 +55,7 @@ export function filterWorkContent(work: any, userLevel: UserLevel, isAdmin: bool
     createdAt: work.createdAt,
     updatedAt: work.updatedAt,
     author: work.author,
+    authorUser: (work as any).authorUser,
     // 基础内容 - 所有人都可以看到
     link: work.link,
     htmlFile: work.htmlFile

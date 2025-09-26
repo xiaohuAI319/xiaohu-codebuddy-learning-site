@@ -20,10 +20,7 @@ const UploadPage: React.FC = () => {
   const [error, setError] = useState('');
 
   const categories = [
-    { id: 'regular', name: '平时作品' },
-    { id: 'camp1', name: 'AI编程训练营第一期' },
-    { id: 'camp2', name: 'AI编程训练营第二期' },
-    { id: 'overseas1', name: 'AI编程出海训练营第一期' },
+    { id: 'regular', name: '平时作品' }
   ];
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -62,8 +59,14 @@ const UploadPage: React.FC = () => {
       return;
     }
 
+    // 互斥校验：仅提供一个
+    if (htmlFile && formData.workUrl) {
+      setError('请仅提供一个：HTML 文件 或 绝对 URL');
+      setLoading(false);
+      return;
+    }
     if (!htmlFile && !formData.workUrl) {
-      setError('请上传HTML文件或提供作品链接');
+      setError('请上传 HTML 文件 或 提供绝对 URL');
       setLoading(false);
       return;
     }
@@ -74,13 +77,16 @@ const UploadPage: React.FC = () => {
       // 添加基本表单数据
       submitData.append('title', formData.title);
       submitData.append('description', formData.description);
-      submitData.append('category', formData.category);
+      submitData.append('category', 'web'); // 固定为web类型
       submitData.append('tags', formData.tags);
-      submitData.append('workUrl', formData.workUrl);
+
+      if (formData.workUrl) {
+        submitData.append('link', formData.workUrl);
+      }
       
       // 只有会员及以上才能提交源码链接
       if (canUploadSourceCode() && formData.sourceCodeUrl) {
-        submitData.append('sourceCodeUrl', formData.sourceCodeUrl);
+        submitData.append('repositoryUrl', formData.sourceCodeUrl);
       }
 
       // 添加文件
@@ -91,21 +97,26 @@ const UploadPage: React.FC = () => {
         submitData.append('htmlFile', htmlFile);
       }
 
-      const token = localStorage.getItem('token');
       const response = await fetch('/api/works', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
         body: submitData
       });
 
       const data = await response.json();
       
-      if (data.success) {
+      if (response.ok) {
         navigate('/works');
       } else {
-        setError(data.message || '上传失败');
+        if (data.errors && Array.isArray(data.errors)) {
+          setError(data.errors.map((err: any) => err.msg).join(', '));
+        } else if (data.validation && Array.isArray(data.validation)) {
+          setError(data.validation.map((v: any) => v.message || v.path).join(', '));
+        } else {
+          setError(data.error || data.message || '上传失败');
+        }
       }
     } catch (error) {
       setError('上传失败，请稍后重试');
@@ -242,7 +253,7 @@ const UploadPage: React.FC = () => {
 
           <div className="mt-6">
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              或者提供作品链接
+              绝对 URL（可选，二选一）
             </label>
             <input
               type="url"

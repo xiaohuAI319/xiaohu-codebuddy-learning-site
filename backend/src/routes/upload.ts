@@ -3,6 +3,7 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { auth, AuthRequest } from '../middleware/auth';
+import crypto from 'crypto';
 
 const router = express.Router();
 
@@ -29,32 +30,40 @@ const storage = multer.diskStorage({
     }
   },
   filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const ext = path.extname(file.originalname);
-    cb(null, file.fieldname + '-' + uniqueSuffix + ext);
+    const ext = path.extname(file.originalname).toLowerCase();
+    const randomName = crypto.randomBytes(16).toString('hex') + ext;
+    cb(null, randomName);
   }
 });
 
 // 文件过滤器
 const fileFilter = (req: any, file: any, cb: any) => {
+  const ext = path.extname(file.originalname || '').toLowerCase();
+  const base = path.basename(file.originalname || '');
+  // 拒绝可疑文件名与双扩展
+  if (!base || base.includes('..') || base.includes('/') || base.includes('\\')) {
+    cb(new Error('Invalid file name'), false);
+    return;
+  }
+  if (/\.(html?|zip)\.(html?|zip|jpg|png|gif|webp)$/i.test(base)) {
+    cb(new Error('Invalid double extension'), false);
+    return;
+  }
+
   if (file.fieldname === 'coverImage') {
-    // 图片文件
-    if (file.mimetype.startsWith('image/')) {
+    const allowedExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+    const isImageMime = file.mimetype.startsWith('image/');
+    if (isImageMime && allowedExts.includes(ext)) {
       cb(null, true);
     } else {
       cb(new Error('Only image files are allowed for cover image'), false);
     }
   } else if (file.fieldname === 'workFile') {
-    // HTML文件或ZIP文件
-    const allowedMimes = [
-      'text/html',
-      'application/zip',
-      'application/x-zip-compressed'
-    ];
-    if (allowedMimes.includes(file.mimetype) || 
-        file.originalname.toLowerCase().endsWith('.html') ||
-        file.originalname.toLowerCase().endsWith('.htm') ||
-        file.originalname.toLowerCase().endsWith('.zip')) {
+    const allowedExts = ['.html', '.htm', '.zip'];
+    const htmlMimes = ['text/html', 'application/xhtml+xml'];
+    const zipMimes = ['application/zip', 'application/x-zip-compressed', 'application/octet-stream'];
+    const okMime = (allowedExts.includes(ext) && (htmlMimes.includes(file.mimetype) || zipMimes.includes(file.mimetype)));
+    if (okMime) {
       cb(null, true);
     } else {
       cb(new Error('Only HTML and ZIP files are allowed for work files'), false);
@@ -165,6 +174,13 @@ router.delete('/file/:filename', auth, (req: AuthRequest, res: express.Response)
   try {
     const { filename } = req.params;
     const { type } = req.query; // 'image' or 'file'
+
+    // 路径穿越防护
+    const safe = path.basename(filename);
+    if (safe !== filename) {
+      res.status(400).json({ error: 'Invalid file name' });
+      return;
+    }
     
     let filePath: string;
     if (type === 'image') {

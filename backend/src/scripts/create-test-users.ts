@@ -49,8 +49,19 @@ async function createTestUsers() {
 
       // 创建用户
       const user = await User.create({
-        ...userData,
-        password: hashedPassword
+        username: userData.email.split('@')[0], // 从邮箱提取用户名
+        email: userData.email,
+        password: hashedPassword,
+        nickname: userData.nickname,
+        role: userData.role as 'admin' | 'coach' | 'student' | 'volunteer',
+        joinDate: new Date(),
+        isActive: true,
+        currentLevel: userData.currentLevel,
+        totalSpent: 0,
+        totalPaid: 0,
+        availableCoupons: [],
+        usedCoupons: [],
+        paymentHistory: []
       });
 
       console.log(`✅ 创建用户成功: ${user.email} (${user.nickname}) - ${user.currentLevel}`);

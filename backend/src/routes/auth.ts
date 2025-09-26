@@ -4,6 +4,12 @@ import { body, validationResult } from 'express-validator';
 import { Op } from 'sequelize';
 import User from '../models/User';
 import { auth } from '../middleware/auth';
+import { createValidationError, createDuplicateError, createAuthError, createNotFoundError, asyncHandler } from '../utils/errorHandler';
+
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  throw new Error('JWT_SECRET environment variable is required');
+}
 
 const router = express.Router();
 
@@ -13,29 +19,24 @@ router.post('/register', [
   body('email').isEmail().normalizeEmail(),
   body('password').isLength({ min: 6 }),
   body('nickname').isLength({ min: 1, max: 50 }).trim()
-], async (req: Request, res: Response): Promise<void> => {
-  try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      res.status(400).json({ errors: errors.array() });
-      return;
+], asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    throw createValidationError('Validation failed', errors.array());
+  }
+
+  const { username, email, password, nickname } = req.body;
+
+  // 检查用户是否已存在
+  const existingUser = await User.findOne({
+    where: {
+      [Op.or]: [{ email }, { username }]
     }
+  });
 
-    const { username, email, password, nickname } = req.body;
-
-    // 检查用户是否已存在
-    const existingUser = await User.findOne({
-      where: {
-        [Op.or]: [{ email }, { username }]
-      }
-    });
-
-    if (existingUser) {
-      res.status(400).json({
-        error: 'User already exists with this email or username'
-      });
-      return;
-    }
+  if (existingUser) {
+    throw createDuplicateError('User already exists with this email or username');
+  }
 
     // 创建新用户
     const user = await User.create({
@@ -57,20 +58,16 @@ router.post('/register', [
     // 生成JWT token
     const token = jwt.sign(
       { userId: user.id.toString() },
-      process.env.JWT_SECRET || 'fallback-secret',
+      JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN || '7d' } as jwt.SignOptions
     );
 
-    res.status(201).json({
-      message: 'User registered successfully',
-      token,
-      user: user.toJSON()
-    });
-  } catch (error) {
-    console.error('Registration error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
+  res.status(201).json({
+    message: 'User registered successfully',
+    token,
+    user: user.toJSON()
+  });
+}));
 
 // 登录
 router.post('/login', [
@@ -109,7 +106,7 @@ router.post('/login', [
     // 生成JWT token
     const token = jwt.sign(
       { userId: user.id.toString() },
-      process.env.JWT_SECRET || 'fallback-secret',
+      JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN || '7d' } as jwt.SignOptions
     );
 
@@ -152,7 +149,7 @@ router.post('/refresh', auth, async (req: any, res: Response): Promise<void> => 
     // 生成新的JWT token
     const token = jwt.sign(
       { userId: user.id.toString() },
-      process.env.JWT_SECRET || 'fallback-secret',
+      JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN || '7d' } as jwt.SignOptions
     );
 
