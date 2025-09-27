@@ -13,7 +13,7 @@ interface Work {
   description: string;
   author: {
     nickname: string;
-    currentLevel: string;
+    levelName: string;
   };
   category: string;
   tags: string[];
@@ -35,7 +35,7 @@ interface Work {
 
 interface User {
   id: string;
-  currentLevel: string;
+  levelName: string;
   role: string;
 }
 
@@ -116,14 +116,14 @@ const WorksPage: React.FC = () => {
           slug: String(w.slug || w.id),
           title: w.title,
           description: w.description,
-          author: (w.author && typeof w.author === 'object') ? w.author : { nickname: '作者', currentLevel: '学员' },
+          author: (w.author && typeof w.author === 'object') ? w.author : { nickname: '作者', levelName: '用户' },
           category: (w.category === 'web' ? 'regular' : (w.category || 'regular')),
           tags: Array.isArray(w.tags) ? w.tags : [],
           coverImage: coverUrl,
           votes: Number(w.votes || 0),
           views: Number(w.views || 0),
           isTopPinned: Boolean(w.isTopPinned || w.isPinned),
-          requiredLevel: w.requiredLevel || '学员',
+          requiredLevel: w.requiredLevel || '用户',
           visibility: (w.visibility === 'members_only' ? 'members_only' : 'public'),
           content: {
             preview: previewUrl,
@@ -162,9 +162,9 @@ const WorksPage: React.FC = () => {
     if (user.role === 'admin') return true;
     if (work.author.nickname === user.nickname) return true;
 
-    const levelHierarchy = ['学员', '会员', '高级会员', '共创', '讲师'];
+    const levelHierarchy = ['游客', '用户', '会员', '高级会员', '共创', '创始人'];
     const requiredIndex = levelHierarchy.indexOf(work.requiredLevel);
-    const userIndex = levelHierarchy.indexOf(user.currentLevel);
+    const userIndex = levelHierarchy.indexOf(user.levelName);
 
     return userIndex >= requiredIndex;
   };
@@ -177,11 +177,12 @@ const WorksPage: React.FC = () => {
     const contentLevels = ['preview', 'prompt', 'sourceCode'];
     const contentIndex = contentLevels.indexOf(contentLevel);
 
-    switch (user.currentLevel) {
+    switch (user.levelName) {
       case '用户': return contentIndex <= 0; // 只能看预览，提示词和源码需要升级
-      case '学员': return contentIndex <= 1; // 可以看预览和提示词，源码需要升级
-      case '高级学员': return true; // 可以看所有内容
-      case '讲师': return true; // 可以看所有内容
+      case '会员': return contentIndex <= 1; // 可以看预览和提示词，源码需要升级
+      case '高级会员': return contentIndex <= 2; // 可以看预览、提示词和基础内容，高级内容和源码需要升级
+      case '共创': return contentIndex <= 3; // 可以看预览、提示词、基础内容和高级内容，源码需要升级
+      case '创始人': return true; // 可以看所有内容
       case '管理员': return true; // 可以看所有内容
       default: return contentIndex === 0; // 默认只能看预览
     }
@@ -199,8 +200,8 @@ const WorksPage: React.FC = () => {
     }
 
     // 检查用户权限：只有用户级别及以上才能投票
-    const canVoteLevels = ['用户', '学员', '高级学员', '讲师', '管理员'];
-    if (!canVoteLevels.includes(user.currentLevel)) {
+    const canVoteLevels = ['用户', '会员', '高级会员', '共创', '创始人', '管理员'];
+    if (!canVoteLevels.includes(user.levelName)) {
       setUpgradePrompt({
         show: true,
         requiredLevel: '用户',
@@ -411,7 +412,7 @@ const WorksPage: React.FC = () => {
       {/* 升级提示弹窗 */}
       {upgradePrompt.show && (
         <UpgradePrompt
-          currentLevel={user?.currentLevel || '游客'}
+          levelName={user?.levelName || '游客'}
           requiredLevel={upgradePrompt.requiredLevel}
           feature={upgradePrompt.feature}
           showLoginButton={upgradePrompt.showLoginButton}

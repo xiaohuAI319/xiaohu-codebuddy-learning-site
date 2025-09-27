@@ -6,6 +6,7 @@
 import bcrypt from 'bcryptjs';
 import User from '../models/User';
 import sequelize from '../config/database';
+import { UserRole } from '../types/permissions';
 
 async function createTestUsers() {
   try {
@@ -53,7 +54,8 @@ async function createTestUsers() {
         email: userData.email,
         password: hashedPassword,
         nickname: userData.nickname,
-        role: userData.role as 'admin' | 'coach' | 'student' | 'volunteer',
+        role: userData.role as UserRole,
+        userLevel: userData.currentLevel === '学员' ? 20 : userData.currentLevel === '会员' ? 30 : 40, // 根据级别设置userLevel
         joinDate: new Date(),
         isActive: true,
         currentLevel: userData.currentLevel,

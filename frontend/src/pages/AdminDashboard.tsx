@@ -36,7 +36,7 @@ interface RecentActivity {
   timestamp: string;
   user?: {
     nickname: string;
-    currentLevel: string;
+    levelName: string;
   };
 }
 
@@ -243,7 +243,7 @@ const AdminDashboard: React.FC = () => {
                     <p className="text-sm text-gray-900">{activity.message}</p>
                     {activity.user && (
                       <p className="text-xs text-gray-500">
-                        {activity.user.nickname} ({activity.user.currentLevel})
+                        {activity.user.nickname} ({activity.user.levelName})
                       </p>
                     )}
                     <p className="text-xs text-gray-400 mt-1">

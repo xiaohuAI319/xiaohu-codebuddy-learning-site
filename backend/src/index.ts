@@ -8,6 +8,7 @@ import rateLimit from 'express-rate-limit';
 import path from 'path';
 // 初始化模型与关联（副作用导入）
 import './models';
+import LevelConfig from './models/LevelConfig';
 
 // 导入数据库配置
 import sequelize from './config/database';
@@ -112,7 +113,7 @@ const connectDB = async () => {
   try {
     await sequelize.authenticate();
     console.log('✅ SQLite数据库连接成功');
-    
+
     // 同步数据库表结构（开发环境）
     if (process.env.NODE_ENV !== 'production') {
       await sequelize.sync();
@@ -128,6 +129,14 @@ const connectDB = async () => {
         console.log('✅ Works.slug 列与唯一索引已就绪');
       } catch (e) {
         console.warn('⚠️ 初始化 Works.slug 列或索引时出现警告（已忽略）:', (e as any)?.message || String(e));
+      }
+
+      // 初始化LevelConfig数据
+      try {
+        await LevelConfig.initializeDefaultConfigs();
+        console.log('✅ LevelConfig权限配置数据初始化完成');
+      } catch (e) {
+        console.warn('⚠️ 初始化LevelConfig数据时出现警告:', (e as any)?.message || String(e));
       }
     }
   } catch (error) {

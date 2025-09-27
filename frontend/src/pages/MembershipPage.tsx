@@ -12,7 +12,7 @@ interface MembershipTier {
 }
 
 interface UserMembership {
-  currentLevel: string;
+  levelName: string;
   totalPaid: number;
   membershipExpiry: string | null;
   currentTier: MembershipTier | null;
@@ -160,11 +160,12 @@ const MembershipPage: React.FC = () => {
 
   const getLevelColor = (level: string) => {
     const colors = {
-      '学员': 'bg-gray-100 text-gray-800',
+      '游客': 'bg-gray-100 text-gray-800',
+      '用户': 'bg-green-100 text-green-800',
       '会员': 'bg-blue-100 text-blue-800',
       '高级会员': 'bg-purple-100 text-purple-800',
       '共创': 'bg-yellow-100 text-yellow-800',
-      '讲师': 'bg-red-100 text-red-800'
+      '创始人': 'bg-red-100 text-red-800'
     };
     return colors[level as keyof typeof colors] || 'bg-gray-100 text-gray-800';
   };
@@ -206,8 +207,8 @@ const MembershipPage: React.FC = () => {
             <h2 className="text-2xl font-bold text-gray-900 mb-4">我的会员状态</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="text-center">
-                <div className={`inline-flex px-4 py-2 rounded-full text-sm font-medium ${getLevelColor(userMembership.currentLevel)}`}>
-                  {userMembership.currentLevel}
+                <div className={`inline-flex px-4 py-2 rounded-full text-sm font-medium ${getLevelColor(userMembership.levelName)}`}>
+                  {userMembership.levelName}
                 </div>
                 <p className="text-gray-600 mt-2">当前等级</p>
               </div>

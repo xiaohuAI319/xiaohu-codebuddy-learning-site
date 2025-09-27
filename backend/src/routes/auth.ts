@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { body, validationResult } from 'express-validator';
 import { Op } from 'sequelize';
 import User from '../models/User';
+import { UserRole } from '../types/permissions';
 import { auth } from '../middleware/auth';
 import { createValidationError, createDuplicateError, createAuthError, createNotFoundError, asyncHandler } from '../utils/errorHandler';
 
@@ -44,7 +45,8 @@ router.post('/register', [
       email,
       password,
       nickname,
-      role: 'student',
+      role: UserRole.STUDENT,
+      userLevel: 20, // 默认用户级别
       joinDate: new Date(),
       isActive: true,
       currentLevel: '用户',

@@ -26,7 +26,7 @@ interface Work {
     id: number;
     username: string;
     nickname: string;
-    currentLevel: string;
+    levelName: string;
   };
 }
 
@@ -52,7 +52,7 @@ const AdminWorksPage: React.FC = () => {
   const [selectedWorks, setSelectedWorks] = useState<number[]>([]);
   const [previewWork, setPreviewWork] = useState<Work | null>(null);
 
-  const membershipLevels = ['学员', '会员', '高级会员', '共创', '讲师'];
+  const membershipLevels = ['游客', '用户', '会员', '高级会员', '共创', '创始人'];
   const statusOptions = [
     { value: 'pending', label: '待审核' },
     { value: 'approved', label: '已通过' },
@@ -98,7 +98,7 @@ const AdminWorksPage: React.FC = () => {
               id: author.id,
               username: author.username || author.email || '',
               nickname: author.nickname || '未知作者',
-              currentLevel: author.currentLevel || '学员'
+              levelName: author.levelName || '用户'
             } : undefined
           } as Work;
         });
@@ -435,7 +435,7 @@ const AdminWorksPage: React.FC = () => {
                       <UserIcon className="w-4 h-4 text-gray-400" />
                       <div>
                         <div className="text-sm font-medium text-gray-900">{work.User?.nickname ?? '未知作者'}</div>
-                        <div className="text-xs text-gray-500">{work.User?.currentLevel ?? '学员'}</div>
+                        <div className="text-xs text-gray-500">{work.User?.levelName ?? '用户'}</div>
                       </div>
                     </div>
                   </td>
@@ -603,7 +603,7 @@ const AdminWorksPage: React.FC = () => {
               <div className="grid grid-cols-2 gap-4 text-sm text-gray-600">
                 <div>
                   <span className="font-medium">作者：</span>
-                  {(previewWork.User?.nickname ?? '未知作者')} ({previewWork.User?.currentLevel ?? '学员'})
+                  {(previewWork.User?.nickname ?? '未知作者')} ({previewWork.User?.levelName ?? '用户'})
                 </div>
                 <div>
                   <span className="font-medium">提交时间：</span>

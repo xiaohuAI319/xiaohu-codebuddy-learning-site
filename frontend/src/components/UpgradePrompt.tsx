@@ -2,7 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 
 interface UpgradePromptProps {
-  currentLevel: string;
+  levelName: string;
   requiredLevel: string;
   feature: string;
   onClose?: () => void;
@@ -11,7 +11,7 @@ interface UpgradePromptProps {
 }
 
 const UpgradePrompt: React.FC<UpgradePromptProps> = ({
-  currentLevel,
+  levelName,
   requiredLevel,
   feature,
   onClose,
@@ -23,13 +23,14 @@ const UpgradePrompt: React.FC<UpgradePromptProps> = ({
 
   const getLevelInfo = (level: string) => {
     const levels = {
-      '学员': { color: 'text-gray-600', price: '9.9' },
+      '游客': { color: 'text-gray-600', price: '0' },
+      '用户': { color: 'text-green-600', price: '9.9' },
       '会员': { color: 'text-blue-600', price: '100' },
       '高级会员': { color: 'text-purple-600', price: '1000' },
       '共创': { color: 'text-yellow-600', price: '5000' },
-      '讲师': { color: 'text-red-600', price: '15000' }
+      '创始人': { color: 'text-red-600', price: '15000' }
     };
-    return levels[level as keyof typeof levels] || levels['学员'];
+    return levels[level as keyof typeof levels] || levels['用户'];
   };
 
   const requiredInfo = getLevelInfo(requiredLevel);
@@ -86,7 +87,7 @@ const UpgradePrompt: React.FC<UpgradePromptProps> = ({
               <div className="bg-gray-50 rounded-lg p-4 mb-4">
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-gray-600">当前等级</span>
-                  <span className="font-semibold">{currentLevel}</span>
+                  <span className="font-semibold">{levelName}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-gray-600">需要等级</span>

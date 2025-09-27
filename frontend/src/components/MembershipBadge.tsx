@@ -13,10 +13,15 @@ const MembershipBadge: React.FC<MembershipBadgeProps> = ({
 }) => {
   const getLevelConfig = (level: string) => {
     const configs = {
-      '学员': {
+      '游客': {
         color: 'bg-gray-100 text-gray-800 border-gray-200',
-        icon: '🎓',
+        icon: '👤',
         gradient: 'from-gray-400 to-gray-600'
+      },
+      '用户': {
+        color: 'bg-blue-100 text-blue-800 border-blue-200',
+        icon: '🔵',
+        gradient: 'from-blue-400 to-blue-600'
       },
       '会员': {
         color: 'bg-blue-100 text-blue-800 border-blue-200',
@@ -33,13 +38,13 @@ const MembershipBadge: React.FC<MembershipBadgeProps> = ({
         icon: '🤝',
         gradient: 'from-yellow-400 to-yellow-600'
       },
-      '讲师': {
+      '创始人': {
         color: 'bg-red-100 text-red-800 border-red-200',
-        icon: '🏆',
+        icon: '👑',
         gradient: 'from-red-400 to-red-600'
       }
     };
-    return configs[level as keyof typeof configs] || configs['学员'];
+    return configs[level as keyof typeof configs] || configs['用户'];
   };
 
   const getSizeClasses = (size: string) => {

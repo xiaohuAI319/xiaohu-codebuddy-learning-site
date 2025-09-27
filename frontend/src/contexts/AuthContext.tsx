@@ -5,7 +5,7 @@ interface User {
   nickname: string;
   email: string;
   role: string;
-  currentLevel: string;
+  levelName: string;
   totalSpent: number;
   membershipTier?: {
     name: string;

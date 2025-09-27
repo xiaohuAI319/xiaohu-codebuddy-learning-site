@@ -37,7 +37,7 @@ export class MembershipService {
       // 记录升级历史
       await MembershipUpgrade.recordUpgrade({
         userId: targetUserId,
-        fromLevel: oldLevel,
+        fromLevel: oldLevel || 'unknown',
         toLevel: newTier.name,
         upgradeType: 'admin',
         operatorId,
@@ -116,7 +116,7 @@ export class MembershipService {
       // 记录升级历史
       await MembershipUpgrade.recordUpgrade({
         userId,
-        fromLevel: oldLevel,
+        fromLevel: oldLevel || 'unknown',
         toLevel: targetTier.name,
         upgradeType: 'serial',
         serialCodeId: serial.id

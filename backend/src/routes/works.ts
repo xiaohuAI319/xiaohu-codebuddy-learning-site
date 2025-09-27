@@ -10,6 +10,7 @@ import MembershipTier from '../models/MembershipTier';
 import Vote from '../models/Vote';
 import { auth, optionalAuth, AuthRequest } from '../middleware/auth';
 import { checkMembershipPermission } from '../middleware/membership';
+import { buildWorkDetailPermissionResponse, checkFeaturePermission } from '../middleware/permissions';
 import { filterWorksList, filterWorkContent, getUserLevelValue, canViewWork } from '../utils/contentFilter';
 
 const router = express.Router();
@@ -532,7 +533,7 @@ router.delete('/:id/pin', auth, async (req: AuthRequest, res: express.Response):
 });
 
 /**
- * 通过 slug 获取作品详情
+ * 通过 slug 获取作品详情 - 使用新的权限系统
  */
 router.get('/slug/:slug', optionalAuth, async (req: AuthRequest, res: express.Response): Promise<void> => {
   try {
@@ -542,7 +543,7 @@ router.get('/slug/:slug', optionalAuth, async (req: AuthRequest, res: express.Re
         {
           model: User,
           as: 'authorUser',
-          attributes: ['id', 'nickname', 'role', 'currentLevel']
+          attributes: ['id', 'nickname', 'role', 'userLevel']
         }
       ]
     });
@@ -554,7 +555,7 @@ router.get('/slug/:slug', optionalAuth, async (req: AuthRequest, res: express.Re
           {
             model: User,
             as: 'authorUser',
-            attributes: ['id', 'nickname', 'role', 'currentLevel']
+            attributes: ['id', 'nickname', 'role', 'userLevel']
           }
         ]
       });
@@ -565,47 +566,18 @@ router.get('/slug/:slug', optionalAuth, async (req: AuthRequest, res: express.Re
       return;
     }
 
-    // 获取用户信息和等级
+    // 获取用户信息
     let user = null;
-    let userLevel = getUserLevelValue(undefined, false);
-    let isAdmin = false;
-    let isAuthor = false;
-
     if (req.user) {
-      user = await User.findByPk(req.user.userId, {
-        include: [{ model: MembershipTier, as: 'membershipTier' }]
-      });
-      
-      if (user) {
-        userLevel = getUserLevelValue(user.currentLevel, true);
-        isAdmin = user.role === 'admin';
-        isAuthor = user.id === work.author;
-      }
+      user = await User.findByPk(req.user.userId);
     }
 
-    // 检查访问权限
-    if (!canViewWork(work, userLevel, isAdmin, isAuthor)) {
-      if (!req.user) {
-        res.status(403).json({ error: '需要登录才能查看此作品' });
-        return;
-      } else {
-        res.status(403).json({ error: '无权查看此作品' });
-        return;
-      }
-    }
-
-    // 根据用户等级过滤内容
-    const filteredWork = filterWorkContent(work, userLevel, isAdmin, isAuthor);
-
-    // 统一返回结构并映射作者信息
-    const json: any = typeof (filteredWork as any).toJSON === 'function' ? (filteredWork as any).toJSON() : filteredWork;
-    const authorObj = json.authorUser || null;
-    delete json.authorUser;
-    json.author = authorObj;
+    // 使用新的权限系统构建响应
+    const response = await buildWorkDetailPermissionResponse(user, work);
 
     res.json({
       success: true,
-      data: json
+      data: response
     });
   } catch (error) {
     console.error('获取作品详情(按slug)失败:', error);

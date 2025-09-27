@@ -14,7 +14,7 @@ interface User {
   email: string;
   nickname: string;
   role: 'admin' | 'coach' | 'student' | 'volunteer';
-  currentLevel: string;
+  levelName: string;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -42,7 +42,7 @@ const AdminUsersPage: React.FC = () => {
   const [selectedUsers, setSelectedUsers] = useState<number[]>([]);
   const [editingUser, setEditingUser] = useState<User | null>(null);
 
-  const membershipLevels = ['学员', '会员', '高级会员', '共创', '讲师'];
+  const membershipLevels = ['游客', '用户', '会员', '高级会员', '共创', '创始人'];
   const roles = [
     { value: 'student', label: '学员' },
     { value: 'coach', label: '教练' },
@@ -123,7 +123,7 @@ const AdminUsersPage: React.FC = () => {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ currentLevel: newLevel })
+        body: JSON.stringify({ levelName: newLevel })
       });
 
       const data = await response.json();
@@ -366,7 +366,7 @@ const AdminUsersPage: React.FC = () => {
                     {editingUser?.id === user.id ? (
                       <div className="flex items-center space-x-2">
                         <select
-                          defaultValue={user.currentLevel}
+                          defaultValue={user.levelName}
                           className="text-sm border border-gray-300 rounded px-2 py-1"
                           onChange={(e) => handleUserLevelUpdate(user.id, e.target.value)}
                         >
@@ -383,7 +383,7 @@ const AdminUsersPage: React.FC = () => {
                       </div>
                     ) : (
                       <div className="flex items-center space-x-2">
-                        <span className="text-sm text-gray-900">{user.currentLevel}</span>
+                        <span className="text-sm text-gray-900">{user.levelName}</span>
                         <button
                           onClick={() => setEditingUser(user)}
                           className="text-gray-400 hover:text-gray-600"

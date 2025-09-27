@@ -41,8 +41,8 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
 
   // 检查会员等级权限
   if (requiredLevel) {
-    const levelHierarchy = ['学员', '会员', '高级会员', '共创', '讲师'];
-    const userLevelIndex = levelHierarchy.indexOf(user.currentLevel);
+    const levelHierarchy = ['游客', '用户', '会员', '高级会员', '共创', '创始人'];
+    const userLevelIndex = levelHierarchy.indexOf(user.levelName);
     const requiredLevelIndex = levelHierarchy.indexOf(requiredLevel);
     
     if (userLevelIndex < requiredLevelIndex) {
@@ -51,7 +51,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
           <div className="text-center">
             <h2 className="text-2xl font-bold text-gray-900 mb-2">会员等级不足</h2>
             <p className="text-gray-600">需要 {requiredLevel} 及以上等级才能访问</p>
-            <p className="text-gray-500 mt-2">您当前等级：{user.currentLevel}</p>
+            <p className="text-gray-500 mt-2">您当前等级：{user.levelName}</p>
           </div>
         </div>
       );
