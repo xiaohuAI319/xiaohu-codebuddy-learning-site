@@ -65,8 +65,12 @@ app.use(limiter);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// 静态文件服务
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+// 静态文件服务 - 添加缓存控制
+app.use('/uploads', express.static(path.join(__dirname, '../uploads'), {
+  maxAge: '1d', // 缓存1天
+  etag: true,
+  lastModified: true
+}));
 
 // API路由
 app.use('/api/auth', authRoutes);

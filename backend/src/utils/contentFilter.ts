@@ -35,9 +35,9 @@ export function getUserLevelValue(userLevel?: string, isLoggedIn: boolean = fals
 /**
  * 根据用户等级过滤作品内容
  */
-export function filterWorkContent(work: any, userLevel: UserLevel, isAdmin: boolean = false): any {
-  // 管理员可以看到所有内容
-  if (isAdmin) {
+export function filterWorkContent(work: any, userLevel: UserLevel, isAdmin: boolean = false, isAuthor: boolean = false): any {
+  // 管理员和作者可以看到所有内容
+  if (isAdmin || isAuthor) {
     return work;
   }
 

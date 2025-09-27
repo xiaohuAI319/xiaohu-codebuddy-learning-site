@@ -185,7 +185,7 @@ router.get('/:id', optionalAuth, async (req: AuthRequest, res: express.Response)
     }
 
     // 根据用户等级过滤内容
-    const filteredWork = filterWorkContent(work, userLevel, isAdmin);
+    const filteredWork = filterWorkContent(work, userLevel, isAdmin, isAuthor);
 
     // 统一返回结构并映射作者信息
     const json: any = typeof (filteredWork as any).toJSON === 'function' ? (filteredWork as any).toJSON() : filteredWork;
@@ -595,7 +595,7 @@ router.get('/slug/:slug', optionalAuth, async (req: AuthRequest, res: express.Re
     }
 
     // 根据用户等级过滤内容
-    const filteredWork = filterWorkContent(work, userLevel, isAdmin);
+    const filteredWork = filterWorkContent(work, userLevel, isAdmin, isAuthor);
 
     // 统一返回结构并映射作者信息
     const json: any = typeof (filteredWork as any).toJSON === 'function' ? (filteredWork as any).toJSON() : filteredWork;

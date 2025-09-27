@@ -24,9 +24,9 @@ const QRCode: React.FC = () => {
   const [hasError, setHasError] = useState(false);
 
   return (
-    <div className="w-32 h-32 bg-white p-2 rounded-lg shadow-md border border-gray-200">
+    <div className="w-full aspect-video bg-white p-3 rounded-lg shadow-md border border-gray-200">
       <img
-        src={hasError ? '/img/xiaohu.svg' : `${process.env.PUBLIC_URL || ''}/img/xiaohu.png`}
+        src={hasError ? '/uploads/xiaohu.svg' : '/uploads/xiaohu.png'}
         alt="微信二维码"
         className="w-full h-full object-contain"
         style={{
@@ -234,46 +234,43 @@ const MembershipPage: React.FC = () => {
 
           {/* 联系小虎提示 */}
           <div className="mb-6 p-6 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
-            <div className="flex items-center gap-6">
-              {/* 二维码主要显示 */}
-              <div className="flex-shrink-0 text-center">
-                <QRCode />
-                <p className="text-xs text-gray-600 mt-2">扫码添加微信</p>
-              </div>
+            <div className="text-center">
+              <h3 className="text-xl font-bold text-blue-900 mb-3">获取序列号</h3>
+              <p className="text-gray-700 mb-6 leading-relaxed">
+                扫描下方二维码添加小虎微信，获取会员序列号，升级您的学习权限，解锁更多优质学习资源和专属功能。
+              </p>
 
-              {/* 联系信息辅助显示 */}
-              <div className="flex-1">
-                <h3 className="text-xl font-bold text-blue-900 mb-3">获取序列号</h3>
-                <p className="text-gray-700 mb-4 leading-relaxed">
-                  扫描左侧二维码添加小虎微信，获取会员序列号，升级您的学习权限，解锁更多优质学习资源和专属功能。
-                </p>
-
-                <div className="space-y-2">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                      <svg className="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 20 20">
-                        <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z"></path>
-                      </svg>
-                    </div>
-                    <div>
-                      <span className="text-sm text-gray-600">微信号：</span>
-                      <span className="font-mono font-semibold text-gray-900">982620</span>
-                    </div>
+              <div className="space-y-4 mb-6">
+                <div className="flex items-center justify-center gap-3">
+                  <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                    <svg className="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z"></path>
+                    </svg>
                   </div>
-
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                      <svg className="w-4 h-4 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
-                        <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z"></path>
-                        <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z"></path>
-                      </svg>
-                    </div>
-                    <div>
-                      <span className="text-sm text-gray-600">邮箱：</span>
-                      <span className="font-mono text-gray-900">cnhztiger@qq.com</span>
-                    </div>
+                  <div>
+                    <span className="text-sm text-gray-600">微信号：</span>
+                    <span className="font-mono font-semibold text-gray-900">982620</span>
                   </div>
                 </div>
+
+                <div className="flex items-center justify-center gap-3">
+                  <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                    <svg className="w-4 h-4 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z"></path>
+                      <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z"></path>
+                    </svg>
+                  </div>
+                  <div>
+                    <span className="text-sm text-gray-600">邮箱：</span>
+                    <span className="font-mono text-gray-900">cnhztiger@qq.com</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 二维码显示 - 宽度与容器相同，适应16:9比例 */}
+              <div className="w-full max-w-md mx-auto">
+                <QRCode />
+                <p className="text-xs text-gray-600 mt-2">扫码添加微信</p>
               </div>
             </div>
           </div>

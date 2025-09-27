@@ -3,10 +3,11 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
 import UpgradePrompt from '../components/UpgradePrompt';
-import { EyeIcon, LockClosedIcon, ArrowTopRightOnSquareIcon, ShareIcon, DocumentDuplicateIcon } from '@heroicons/react/24/outline';
+import { LockClosedIcon, ArrowTopRightOnSquareIcon, ShareIcon, DocumentDuplicateIcon } from '@heroicons/react/24/outline';
 
 interface Work {
-  id: string;
+  id: number;
+  slug: string;
   title: string;
   description: string;
   author: {
@@ -56,7 +57,7 @@ const WorksDetailPage: React.FC = () => {
     return previewSrc.startsWith('http') ? previewSrc : (pathForUrl ? `${apiOrigin}/${pathForUrl}` : '');
   }, [apiOrigin]);
 
-  
+
   const fetchWork = useCallback(async () => {
     if (!slug) return;
     try {
@@ -69,6 +70,8 @@ const WorksDetailPage: React.FC = () => {
       if (res.ok) {
         const data = await res.json();
         const w = data?.data || data; // 兼容不同返回结构
+
+  
         const coverRaw = String(w.coverImage || '').replace(/\\/g, '/');
         const normPath = coverRaw.replace(/^\/+/, '');
         const coverUrl = normPath.startsWith('http')
@@ -77,7 +80,8 @@ const WorksDetailPage: React.FC = () => {
         const previewUrl = buildPreviewUrl(w);
 
         const normalized: Work = {
-          id: String(w.slug || slug || w.id || ''),
+          id: Number(w.id || 0),
+          slug: String(w.slug || slug || ''),
           title: w.title || '作品',
           description: w.description || '',
           author: (w.author && typeof w.author === 'object') ? w.author : { nickname: '作者', currentLevel: '学员' },
@@ -91,6 +95,10 @@ const WorksDetailPage: React.FC = () => {
           visibility: (w.visibility === 'members_only' ? 'members_only' : 'public'),
           content: {
             preview: previewUrl,
+            basic: w.content?.basic,
+            advanced: w.content?.advanced,
+            premium: w.content?.premium,
+            sourceCode: w.content?.sourceCode,
           },
           prompt: w.prompt,
           repositoryUrl: w.repositoryUrl,
@@ -115,7 +123,12 @@ const WorksDetailPage: React.FC = () => {
   const canUserAccessContent = (contentLevel: string): boolean => {
     if (!user) return contentLevel === 'preview';
     if (user.role === 'admin') return true;
-    if (work && work.author.nickname === user.id) return true;
+
+    // 检查是否是作者 - 通过作者的昵称和当前用户的昵称比较
+    const isAuthor = work && work.author.nickname === user.nickname;
+
+  
+    if (isAuthor) return true;
 
     const contentLevels = ['preview', 'prompt', 'sourceCode'];
     const contentIndex = contentLevels.indexOf(contentLevel);
@@ -153,8 +166,7 @@ const WorksDetailPage: React.FC = () => {
   };
 
   const handleVote = async () => {
-    console.log('详情页投票点击 - 用户信息:', user);
-    if (!user) {
+      if (!user) {
       setUpgradePrompt({ show: true, requiredLevel: '', feature: '请先登录后再投票', showLoginButton: true });
       return;
     }
@@ -182,12 +194,19 @@ const WorksDetailPage: React.FC = () => {
       if (res.ok) {
         // 简单刷新票数：重新拉取详情
         fetchWork();
-      } else if (res.status === 403) {
-        // 后端权限检查失败，显示升级提示
-        setUpgradePrompt({ show: true, requiredLevel: '用户', feature: '投票功能' });
+      } else {
+        const errorData = await res.json();
+        if (res.status === 403) {
+          // 后端权限检查失败，显示升级提示
+          setUpgradePrompt({ show: true, requiredLevel: '用户', feature: '投票功能' });
+        } else {
+          // 显示其他错误信息
+          setUpgradePrompt({ show: true, requiredLevel: '', feature: errorData.error || '投票失败' });
+        }
       }
     } catch (e) {
       console.error('投票失败:', e);
+      setUpgradePrompt({ show: true, requiredLevel: '', feature: '投票失败，请重试' });
     }
   };
 
@@ -265,7 +284,6 @@ const WorksDetailPage: React.FC = () => {
                   onClick={handleOpenPreview}
                   className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium flex items-center justify-center"
                 >
-                  <EyeIcon className="w-5 h-5 mr-2" />
                   查看作品
                 </button>
               )}
@@ -292,7 +310,7 @@ const WorksDetailPage: React.FC = () => {
             </div>
           </div>
 
-          {/* 作品提示词 - 对所有登录用户显示，但用户级别需要升级 */}
+          {/* 作品提示词 */}
           {user && (
             <div className="bg-white rounded-lg shadow-md p-6">
               <h2 className="text-lg font-semibold text-gray-900 mb-2">作品提示词</h2>
@@ -332,8 +350,8 @@ const WorksDetailPage: React.FC = () => {
             </div>
           )}
 
-          {/* 源码链接 - 对学员及以上级别显示，但学员需要升级 */}
-          {work.repositoryUrl && user && user.currentLevel !== '用户' && (
+          {/* 源码链接 */}
+          {work.repositoryUrl && user && (
             <div className="bg-white rounded-lg shadow-md p-6">
               <h2 className="text-lg font-semibold text-gray-900 mb-2">源码链接</h2>
               {canUserAccessContent('sourceCode') ? (
@@ -363,12 +381,12 @@ const WorksDetailPage: React.FC = () => {
                 <div className="bg-gray-50 p-4 rounded-lg border-2 border-dashed border-gray-300">
                   <div className="flex items-center justify-center text-gray-500">
                     <LockClosedIcon className="w-5 h-5 mr-2" />
-                    <span>源码需要会员权限查看</span>
+                    <span>源码需要高级学员权限查看</span>
                   </div>
                   <div className="mt-3 text-center">
                     <button
                       onClick={() => {
-                        setUpgradePrompt({ show: true, requiredLevel: '会员', feature: '查看源码' });
+                        setUpgradePrompt({ show: true, requiredLevel: '高级学员', feature: '查看源码' });
                       }}
                       className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
                     >

@@ -490,6 +490,28 @@ cd backend && npm run init-db
 - 用户体验优化：绿色主题登录提示，支持跳转登录页面
 - 测试数据管理：TypeScript类型安全的测试数据生成脚本
 
+### 🎉 序列号激活图片修复和布局优化 (2025/9/27 完成)
+- ✅ 序列号激活图片频繁刷新问题修复
+  - ✅ 问题根因分析：frontend/img/目录下的静态文件服务导致图片不断刷新
+  - ✅ 解决方案：将序列号激活图片(xiaohu.png)从frontend/img/移动到backend/uploads/目录
+  - ✅ 技术实现：修改MembershipPage.tsx中的图片路径引用从`/img/xiaohu.png`改为`/uploads/xiaohu.png`
+  - ✅ 后端优化：在backend/src/index.ts中为静态文件服务添加缓存控制(`maxAge: '1d'`)
+  - ✅ 验证结果：图片正常显示且不再频繁刷新，提升用户体验
+
+- ✅ 序列号激活区域布局重新设计
+  - ✅ 需求分析：二维码图片框太小，无法良好展示16:9比例的图片
+  - ✅ 布局重构：从左右布局改为上下布局，将二维码图片移到邮箱信息下方
+  - ✅ 尺寸优化：QRCode组件从固定尺寸(w-32 h-32)改为自适应比例(`aspect-video`)，宽度与容器相同
+  - ✅ 文字更新：将引导文字从"扫描左侧二维码"改为"扫描下方二维码"
+  - ✅ 用户体验：更大的二维码显示区域，更容易扫码添加微信
+
+#### 技术实现细节
+- **图片迁移**：`frontend/img/xiaohu.png` → `backend/uploads/xiaohu.png`
+- **路径更新**：`/img/xiaohu.png` → `/uploads/xiaohu.png`
+- **布局结构**：flex左右布局 → text-center垂直布局
+- **尺寸适配**：固定小尺寸 → `w-full aspect-video` 自适应16:9比例
+- **缓存控制**：添加Express静态文件缓存配置，防止频繁刷新
+
 #### 下一步计划
 - 作品上传模块测试
 - 会员系统功能测试
@@ -497,4 +519,4 @@ cd backend && npm run init-db
 - 为历史作品批量生成slug的迁移脚本
 
 **本次更新作者**: Claude AI Assistant
-**最后更新**: 2025年9月27日 10:00
+**最后更新**: 2025年9月27日 11:00
