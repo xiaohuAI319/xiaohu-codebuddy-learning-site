@@ -12,7 +12,8 @@ const UploadPage: React.FC = () => {
     category: 'regular',
     tags: '',
     workUrl: '',
-    sourceCodeUrl: '' // 源码仓库链接
+    sourceCodeUrl: '', // 源码仓库链接
+    prompt: '' // 作品提示词
   });
   const [coverImage, setCoverImage] = useState<File | null>(null);
   const [htmlFile, setHtmlFile] = useState<File | null>(null);
@@ -41,13 +42,6 @@ const UploadPage: React.FC = () => {
     }
   };
 
-  // 检查用户是否可以上传源码
-  const canUploadSourceCode = () => {
-    if (!user) return false;
-    // 学员级别不能上传源码，会员及以上可以
-    return user.currentLevel !== '学员' && user.role !== 'student';
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -61,12 +55,12 @@ const UploadPage: React.FC = () => {
 
     // 互斥校验：仅提供一个
     if (htmlFile && formData.workUrl) {
-      setError('请仅提供一个：HTML 文件 或 绝对 URL');
+      setError('请仅提供一个：HTML 文件 或 URL');
       setLoading(false);
       return;
     }
     if (!htmlFile && !formData.workUrl) {
-      setError('请上传 HTML 文件 或 提供绝对 URL');
+      setError('请上传 HTML 文件 或 提供 URL');
       setLoading(false);
       return;
     }
@@ -84,9 +78,14 @@ const UploadPage: React.FC = () => {
         submitData.append('link', formData.workUrl);
       }
       
-      // 只有会员及以上才能提交源码链接
-      if (canUploadSourceCode() && formData.sourceCodeUrl) {
+      // 添加源码链接
+      if (formData.sourceCodeUrl) {
         submitData.append('repositoryUrl', formData.sourceCodeUrl);
+      }
+
+      // 添加提示词（必填）
+      if (formData.prompt) {
+        submitData.append('prompt', formData.prompt);
       }
 
       // 添加文件
@@ -140,7 +139,7 @@ const UploadPage: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                作品标题 *
+                作品标题 <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
@@ -154,7 +153,7 @@ const UploadPage: React.FC = () => {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                分类 *
+                分类 <span className="text-red-500">*</span>
               </label>
               <select
                 name="category"
@@ -172,7 +171,7 @@ const UploadPage: React.FC = () => {
 
           <div className="mt-6">
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              作品描述 *
+              作品描述 <span className="text-red-500">*</span>
             </label>
             <textarea
               name="description"
@@ -197,41 +196,42 @@ const UploadPage: React.FC = () => {
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
+
         </div>
 
-        {/* 文件上传 */}
+        {/* 封面图片 */}
         <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">文件上传</h2>
-          
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">封面图片 <span className="text-red-500">*</span></h2>
+
+          <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors">
+            <PhotoIcon className="w-12 h-12 text-gray-400 mx-auto mb-2" />
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => handleFileChange(e, 'cover')}
+              className="hidden"
+              id="coverImage"
+            />
+            <label htmlFor="coverImage" className="cursor-pointer">
+              <span className="text-blue-600 hover:text-blue-500">点击上传封面图片</span>
+              <p className="text-gray-500 text-sm mt-1">支持 JPG, PNG, GIF 格式 (推荐尺寸: 800x600)</p>
+            </label>
+            {coverImage && (
+              <p className="text-green-600 text-sm mt-2">已选择: {coverImage.name}</p>
+            )}
+          </div>
+        </div>
+
+        {/* 作品内容 */}
+        <div className="bg-white rounded-lg shadow p-6">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">作品内容 <span className="text-red-500">*</span>（HTML、URL二选一）</h2>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                封面图片 * (推荐尺寸: 800x600)
+                HTML文件
               </label>
-              <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors">
-                <PhotoIcon className="w-12 h-12 text-gray-400 mx-auto mb-2" />
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => handleFileChange(e, 'cover')}
-                  className="hidden"
-                  id="coverImage"
-                />
-                <label htmlFor="coverImage" className="cursor-pointer">
-                  <span className="text-blue-600 hover:text-blue-500">点击上传封面图片</span>
-                  <p className="text-gray-500 text-sm mt-1">支持 JPG, PNG, GIF 格式</p>
-                </label>
-                {coverImage && (
-                  <p className="text-green-600 text-sm mt-2">已选择: {coverImage.name}</p>
-                )}
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                HTML文件（可选）
-              </label>
-              <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors">
+              <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors h-32 flex flex-col justify-center">
                 <DocumentIcon className="w-12 h-12 text-gray-400 mx-auto mb-2" />
                 <input
                   type="file"
@@ -249,75 +249,63 @@ const UploadPage: React.FC = () => {
                 )}
               </div>
             </div>
-          </div>
 
-          <div className="mt-6">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              绝对 URL（可选，二选一）
-            </label>
-            <input
-              type="url"
-              name="workUrl"
-              value={formData.workUrl}
-              onChange={handleChange}
-              placeholder="https://example.com/your-work"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
-          </div>
-        </div>
-
-        {/* 源码仓库 - 仅会员及以上可见 */}
-        {canUploadSourceCode() && (
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
-              <CodeBracketIcon className="w-6 h-6 mr-2 text-blue-600" />
-              源码仓库
-              <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">会员专享</span>
-            </h2>
-            <p className="text-gray-600 mb-4">
-              提供源码仓库链接，让其他会员学习您的代码实现。
-            </p>
-            
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                源码仓库链接（可选）
+                URL
               </label>
-              <input
-                type="url"
-                name="sourceCodeUrl"
-                value={formData.sourceCodeUrl}
-                onChange={handleChange}
-                placeholder="https://github.com/username/repository"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-              <p className="text-sm text-gray-500 mt-1">
-                支持 GitHub、GitLab、Gitee 等代码托管平台链接
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* 学员提示信息 */}
-        {!canUploadSourceCode() && (
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <CodeBracketIcon className="w-6 h-6 text-yellow-600" />
-              </div>
-              <div className="ml-3">
-                <h3 className="text-sm font-medium text-yellow-800">
-                  升级会员解锁源码分享功能
-                </h3>
-                <p className="text-sm text-yellow-700 mt-1">
-                  成为会员后，您可以分享源码仓库链接，与其他开发者交流学习。
-                  <a href="/membership" className="font-medium underline hover:text-yellow-600 ml-1">
-                    立即升级 →
-                  </a>
+              <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 h-32 flex flex-col justify-center">
+                <input
+                  type="url"
+                  name="workUrl"
+                  value={formData.workUrl}
+                  onChange={handleChange}
+                  placeholder="https://example.com/your-work"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 mb-2"
+                />
+                <p className="text-sm text-gray-500">
+                  请输入可以访问作品的URL地址
                 </p>
               </div>
             </div>
           </div>
-        )}
+        </div>
+
+        {/* 作品提示词 */}
+        <div className="bg-white rounded-lg shadow p-6">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">作品提示词 <span className="text-red-500">*</span></h2>
+
+          <textarea
+            name="prompt"
+            value={formData.prompt}
+            onChange={handleChange}
+            rows={6}
+            placeholder="请详细描述您的作品创作过程中使用的AI提示词、技术要点和实现思路..."
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            required
+          />
+        </div>
+
+        {/* 源码链接 */}
+        <div className="bg-white rounded-lg shadow p-6">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
+            <CodeBracketIcon className="w-6 h-6 mr-2 text-blue-600" />
+            源码链接
+          </h2>
+
+          <input
+            type="url"
+            name="sourceCodeUrl"
+            value={formData.sourceCodeUrl}
+            onChange={handleChange}
+            placeholder="https://github.com/username/repository"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          />
+          <p className="text-sm text-gray-500 mt-1">
+            支持 GitHub、GitLab、Gitee 等代码托管平台链接
+          </p>
+        </div>
+
 
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-4">

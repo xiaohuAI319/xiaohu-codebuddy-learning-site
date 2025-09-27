@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run dev:*)",
+      "Bash(npm start)",
+      "Bash(curl:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(taskkill:*)",
+      "Bash(tasklist:*)",
+      "WebFetch(domain:www.aipoju-showcase.online)",
+      "WebSearch",
+      "Bash(npm run init-db:*)",
+      "Bash(pkill:*)",
+      "Bash(/bashes)",
+      "Bash(npx ts-node:*)",
+      "Bash(npm run create-test-works:*)",
+      "Bash(sqlite3:*)",
+      "Bash(chmod:*)",
+      "Bash(git add:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

@@ -5,20 +5,20 @@
 // 用户等级枚举
 export enum UserLevel {
   VISITOR = 0,      // 访客（未登录）
-  STUDENT = 1,      // 学员
-  MEMBER = 2,       // 会员
-  ADVANCED = 3,     // 高级会员
-  PREMIUM = 4,      // 共创
-  INSTRUCTOR = 5    // 讲师
+  USER = 1,         // 用户
+  STUDENT = 2,      // 学员
+  ADVANCED_STUDENT = 3, // 高级学员
+  INSTRUCTOR = 4,   // 讲师
+  ADMIN = 5         // 管理员
 }
 
 // 等级映射
 const LEVEL_MAP: { [key: string]: UserLevel } = {
+  '用户': UserLevel.USER,
   '学员': UserLevel.STUDENT,
-  '会员': UserLevel.MEMBER,
-  '高级会员': UserLevel.ADVANCED,
-  '共创': UserLevel.PREMIUM,
-  '讲师': UserLevel.INSTRUCTOR
+  '高级学员': UserLevel.ADVANCED_STUDENT,
+  '讲师': UserLevel.INSTRUCTOR,
+  '管理员': UserLevel.ADMIN
 };
 
 /**
@@ -61,8 +61,13 @@ export function filterWorkContent(work: any, userLevel: UserLevel, isAdmin: bool
     htmlFile: work.htmlFile
   };
 
-  // 源码仓库链接权限控制：只有会员级别及以上可以看到
-  if (userLevel >= UserLevel.MEMBER && work.repositoryUrl) {
+  // 提示词权限控制：学员级别及以上可以看到
+  if (userLevel >= UserLevel.STUDENT && work.prompt) {
+    filteredWork.prompt = work.prompt;
+  }
+
+  // 源码仓库链接权限控制：学员级别及以上可以看到，但前端会控制显示
+  if (userLevel >= UserLevel.STUDENT && work.repositoryUrl) {
     filteredWork.repositoryUrl = work.repositoryUrl;
   }
 

@@ -7,6 +7,7 @@ import Coupon from './Coupon';
 import SerialCode from './SerialCode';
 import OperationLog from './OperationLog';
 import MembershipUpgrade from './MembershipUpgrade';
+import Vote from './Vote';
 
 // 定义模型关联
 User.belongsTo(MembershipTier, { 
@@ -67,19 +68,40 @@ OperationLog.belongsTo(User, {
 });
 
 // 会员升级记录关联
-MembershipUpgrade.belongsTo(User, { 
-  foreignKey: 'userId', 
-  as: 'user' 
+MembershipUpgrade.belongsTo(User, {
+  foreignKey: 'userId',
+  as: 'user'
 });
 
-MembershipUpgrade.belongsTo(User, { 
-  foreignKey: 'operatorId', 
-  as: 'operator' 
+MembershipUpgrade.belongsTo(User, {
+  foreignKey: 'operatorId',
+  as: 'operator'
 });
 
-MembershipUpgrade.belongsTo(SerialCode, { 
-  foreignKey: 'serialCodeId', 
-  as: 'serialCode' 
+MembershipUpgrade.belongsTo(SerialCode, {
+  foreignKey: 'serialCodeId',
+  as: 'serialCode'
+});
+
+// 投票记录关联
+Vote.belongsTo(User, {
+  foreignKey: 'userId',
+  as: 'user'
+});
+
+Vote.belongsTo(Work, {
+  foreignKey: 'workId',
+  as: 'work'
+});
+
+User.hasMany(Vote, {
+  foreignKey: 'userId',
+  as: 'userVotes'
+});
+
+Work.hasMany(Vote, {
+  foreignKey: 'workId',
+  as: 'voteRecords'
 });
 
 // 导出所有模型和数据库连接
@@ -92,7 +114,8 @@ export {
   Coupon,
   SerialCode,
   OperationLog,
-  MembershipUpgrade
+  MembershipUpgrade,
+  Vote
 };
 
 export default sequelize;

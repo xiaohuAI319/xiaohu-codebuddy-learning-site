@@ -12,7 +12,8 @@ export interface WorkAttributes {
   link?: string;
   category: 'web' | 'mobile' | 'desktop' | 'ai' | 'other';
   tags?: string;              // 标签，逗号分隔
-  repositoryUrl?: string;     // 源码仓库链接，会员级别及以上可见
+  repositoryUrl?: string;     // 源码仓库链接，高级学员及以上可见
+  prompt?: string;           // 作品提示词，学员及以上可见
   bootcamp?: string;
   author: number;
   votes: number;
@@ -37,6 +38,7 @@ class Work extends Model<WorkAttributes, WorkCreationAttributes> implements Work
   public category!: 'web' | 'mobile' | 'desktop' | 'ai' | 'other';
   public tags?: string;
   public repositoryUrl?: string;
+  public prompt?: string;
   public bootcamp?: string;
   public author!: number;
   public votes!: number;
@@ -113,7 +115,15 @@ Work.init(
       validate: {
         isUrl: true,
       },
-      comment: '源码仓库链接，会员级别及以上可见',
+      comment: '源码仓库链接，高级学员及以上可见',
+    },
+    prompt: {
+      type: DataTypes.TEXT,
+      allowNull: false,
+      validate: {
+        notEmpty: true,
+      },
+      comment: '作品提示词，学员及以上可见',
     },
     bootcamp: {
       type: DataTypes.STRING(100),

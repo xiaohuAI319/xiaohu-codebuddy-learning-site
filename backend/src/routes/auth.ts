@@ -47,7 +47,7 @@ router.post('/register', [
       role: 'student',
       joinDate: new Date(),
       isActive: true,
-      currentLevel: '学员',
+      currentLevel: '用户',
       totalSpent: 0,
       totalPaid: 0,
       availableCoupons: [],

@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
 import UpgradePrompt from '../components/UpgradePrompt';
-import { EyeIcon, LockClosedIcon, ArrowTopRightOnSquareIcon, ShareIcon, DocumentDuplicateIcon } from '@heroicons/react/24/outline';
+import { EyeIcon, StarIcon, LockClosedIcon, ArrowTopRightOnSquareIcon, ShareIcon, DocumentDuplicateIcon } from '@heroicons/react/24/outline';
 
 interface Work {
   id: string;
@@ -35,13 +35,18 @@ interface Work {
   htmlFile?: string;
 }
 
+interface User {
+  id: string;
+  currentLevel: string;
+  role: string;
+}
 
 const WorksDetailPage: React.FC = () => {
   const { slug } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
   const [work, setWork] = useState<Work | null>(null);
-  const [upgradePrompt, setUpgradePrompt] = useState<{ show: boolean; requiredLevel: string; feature: string; showLoginButton?: boolean }>({ show: false, requiredLevel: '', feature: '' });
+  const [upgradePrompt, setUpgradePrompt] = useState<{ show: boolean; requiredLevel: string; feature: string }>({ show: false, requiredLevel: '', feature: '' });
   const [loading, setLoading] = useState(true);
 
   const apiOrigin = window.location.origin.includes(':3000')
@@ -120,11 +125,10 @@ const WorksDetailPage: React.FC = () => {
     const contentLevels = ['preview', 'prompt', 'sourceCode'];
     const contentIndex = contentLevels.indexOf(contentLevel);
     switch (user.currentLevel) {
-      case '用户': return contentIndex <= 0; // 只能看预览，提示词和源码需要升级
-      case '学员': return contentIndex <= 1; // 可以看预览和提示词，源码需要升级
-      case '高级学员': return true; // 可以看所有内容
+      case '用户': return contentIndex <= 0; // 只能看预览
+      case '学员': return contentIndex <= 1; // 可以看预览和提示词
+      case '高级学员':
       case '讲师': return true; // 可以看所有内容
-      case '管理员': return true; // 可以看所有内容
       default: return contentIndex === 0; // 默认只能看预览
     }
   };
@@ -148,14 +152,10 @@ const WorksDetailPage: React.FC = () => {
     });
   };
 
-  const handleLoginRedirect = () => {
-    navigate('/login');
-  };
-
   const handleVote = async () => {
     console.log('详情页投票点击 - 用户信息:', user);
     if (!user) {
-      setUpgradePrompt({ show: true, requiredLevel: '', feature: '请先登录后再投票', showLoginButton: true });
+      alert('请先登录后再投票');
       return;
     }
 
@@ -292,48 +292,44 @@ const WorksDetailPage: React.FC = () => {
             </div>
           </div>
 
-          {/* 作品提示词 - 对所有登录用户显示，但用户级别需要升级 */}
-          {user && (
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-2">作品提示词</h2>
-              {canUserAccessContent('prompt') ? (
-                <div className="space-y-3">
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <p className="text-gray-700 whitespace-pre-line">{work.prompt || '暂无提示词'}</p>
-                  </div>
-                  {work.prompt && (
-                    <button
-                      onClick={handleCopyPrompt}
-                      className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 text-sm flex items-center"
-                    >
-                      <DocumentDuplicateIcon className="w-4 h-4 mr-2" />
-                      复制提示词
-                    </button>
-                  )}
+          {/* 作品提示词 */}
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-2">作品提示词</h2>
+            {canUserAccessContent('prompt') ? (
+              <div className="space-y-3">
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <p className="text-gray-700 whitespace-pre-line">{work.prompt || '暂无提示词'}</p>
                 </div>
-              ) : (
-                <div className="bg-gray-50 p-4 rounded-lg border-2 border-dashed border-gray-300">
-                  <div className="flex items-center justify-center text-gray-500">
-                    <LockClosedIcon className="w-5 h-5 mr-2" />
-                    <span>提示词需要学员权限查看</span>
-                  </div>
-                  <div className="mt-3 text-center">
-                    <button
-                      onClick={() => {
-                        setUpgradePrompt({ show: true, requiredLevel: '学员', feature: '查看提示词' });
-                      }}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
-                    >
-                      立即升级
-                    </button>
-                  </div>
+                {work.prompt && (
+                  <button
+                    onClick={handleCopyPrompt}
+                    className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 text-sm flex items-center"
+                  >
+                    <DocumentDuplicateIcon className="w-4 h-4 mr-2" />
+                    复制提示词
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="bg-gray-50 p-4 rounded-lg border-2 border-dashed border-gray-300">
+                <div className="flex items-center justify-center text-gray-500">
+                  <LockClosedIcon className="w-5 h-5 mr-2" />
+                  <span>提示词需要学员权限查看</span>
                 </div>
-              )}
-            </div>
-          )}
+                <div className="mt-3 text-center">
+                  <button
+                    onClick={() => setUpgradePrompt({ show: true, requiredLevel: '学员', feature: '查看提示词' })}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+                  >
+                    立即升级
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
 
-          {/* 源码链接 - 对学员及以上级别显示，但学员需要升级 */}
-          {work.repositoryUrl && user && user.currentLevel !== '用户' && (
+          {/* 源码链接 */}
+          {work.repositoryUrl && (
             <div className="bg-white rounded-lg shadow-md p-6">
               <h2 className="text-lg font-semibold text-gray-900 mb-2">源码链接</h2>
               {canUserAccessContent('sourceCode') ? (
@@ -363,13 +359,11 @@ const WorksDetailPage: React.FC = () => {
                 <div className="bg-gray-50 p-4 rounded-lg border-2 border-dashed border-gray-300">
                   <div className="flex items-center justify-center text-gray-500">
                     <LockClosedIcon className="w-5 h-5 mr-2" />
-                    <span>源码需要会员权限查看</span>
+                    <span>源码需要高级学员权限查看</span>
                   </div>
                   <div className="mt-3 text-center">
                     <button
-                      onClick={() => {
-                        setUpgradePrompt({ show: true, requiredLevel: '会员', feature: '查看源码' });
-                      }}
+                      onClick={() => setUpgradePrompt({ show: true, requiredLevel: '高级学员', feature: '查看源码' })}
                       className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
                     >
                       立即升级
@@ -398,7 +392,7 @@ const WorksDetailPage: React.FC = () => {
           <div className="bg-white rounded-lg shadow-md p-4">
             <h3 className="text-sm font-semibold text-gray-900 mb-3">作品信息</h3>
             <div className="text-sm text-gray-700 space-y-1">
-              <div>作品类型：{work.link ? 'URL' : (work.htmlFile ? 'HTML文件' : '未知')}</div>
+              <div>作品类型：{work.link ? '绝对URL' : (work.htmlFile ? 'HTML文件' : '未知')}</div>
               <div>发布时间：{new Date(work.createdAt).toLocaleDateString()}</div>
               <div>所属分类：{work.category === 'regular' ? '平时作品' : (work.category === 'camp1' ? 'AI编程训练营即将开启' : '全部作品')}</div>
             </div>
@@ -424,8 +418,6 @@ const WorksDetailPage: React.FC = () => {
           currentLevel={user?.currentLevel || '游客'}
           requiredLevel={upgradePrompt.requiredLevel}
           feature={upgradePrompt.feature}
-          showLoginButton={upgradePrompt.showLoginButton}
-          onLogin={upgradePrompt.showLoginButton ? handleLoginRedirect : undefined}
           onClose={() => setUpgradePrompt({ show: false, requiredLevel: '', feature: '' })}
         />
       )}

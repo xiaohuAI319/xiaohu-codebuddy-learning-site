@@ -7,6 +7,7 @@ import crypto from 'crypto';
 import Work from '../models/Work';
 import User from '../models/User';
 import MembershipTier from '../models/MembershipTier';
+import Vote from '../models/Vote';
 import { auth, optionalAuth, AuthRequest } from '../middleware/auth';
 import { checkMembershipPermission } from '../middleware/membership';
 import { filterWorksList, filterWorkContent, getUserLevelValue, canViewWork } from '../utils/contentFilter';
@@ -205,7 +206,6 @@ router.get('/:id', optionalAuth, async (req: AuthRequest, res: express.Response)
 // 创建新作品
 router.post('/', [
   auth,
-  checkMembershipPermission('canUploadWorks'),
   upload.fields([
     { name: 'coverImage', maxCount: 1 },
     { name: 'htmlFile', maxCount: 1 }
@@ -215,6 +215,7 @@ router.post('/', [
   body('category').isIn(['web', 'mobile', 'desktop', 'ai', 'other']).withMessage('无效的分类'),
   body('visibility').optional().isIn(['public', 'private']).withMessage('无效的可见性设置'),
   body('tags').optional().isLength({ max: 500 }).withMessage('标签长度不能超过500字符'),
+  body('prompt').trim().isLength({ min: 1, max: 2000 }).withMessage('提示词长度必须在1-2000字符之间'),
   body('repositoryUrl').optional().isURL().withMessage('源码仓库链接格式不正确')
 ], async (req: AuthRequest, res: express.Response): Promise<void> => {
   try {
@@ -233,33 +234,22 @@ router.post('/', [
     }
 
     const files = req.files as { [fieldname: string]: Express.Multer.File[] };
-    
+
     if (!files.coverImage || files.coverImage.length === 0) {
       res.status(400).json({ error: '必须上传封面图片' });
       return;
     }
 
     if (!req.body.link && (!files.htmlFile || files.htmlFile.length === 0)) {
-      res.status(400).json({ error: '必须提供绝对URL或上传HTML文件' });
+      res.status(400).json({ error: '必须提供URL或上传HTML文件' });
       return;
     }
 
-    // 检查源码仓库链接权限
-    if (req.body.repositoryUrl) {
-      const user = await User.findByPk(req.user!.userId, {
-        include: [{ model: MembershipTier, as: 'membershipTier' }]
-      });
-      
-      if (!user) {
-        res.status(404).json({ error: '用户不存在' });
-        return;
-      }
-
-      const userLevel = getUserLevelValue(user.currentLevel, true);
-      if (userLevel < 2) { // 会员级别以下不能上传源码链接
-        res.status(403).json({ error: '只有会员级别及以上用户才能上传源码仓库链接' });
-        return;
-      }
+    // 检查用户是否存在（验证登录状态）
+    const user = await User.findByPk(req.user!.userId);
+    if (!user) {
+      res.status(404).json({ error: '用户不存在' });
+      return;
     }
 
     const workData: any = {
@@ -268,6 +258,7 @@ router.post('/', [
       category: req.body.category,
       tags: req.body.tags || null,
       repositoryUrl: req.body.repositoryUrl || null,
+      prompt: req.body.prompt || '',
       bootcamp: req.body.bootcamp || null,
       visibility: req.body.visibility || 'public',
       coverImage: files.coverImage[0].path,
@@ -352,28 +343,17 @@ router.put('/:id', [
       return;
     }
 
-    // 检查权限
+    // 检查用户是否存在和权限
     if (work.author !== req.user!.userId && req.user!.role !== 'admin') {
       res.status(403).json({ error: '无权修改此作品' });
       return;
     }
 
-    // 检查源码仓库链接权限
-    if (req.body.repositoryUrl !== undefined) {
-      const user = await User.findByPk(req.user!.userId, {
-        include: [{ model: MembershipTier, as: 'membershipTier' }]
-      });
-      
-      if (!user) {
-        res.status(404).json({ error: '用户不存在' });
-        return;
-      }
-
-      const userLevel = getUserLevelValue(user.currentLevel, true);
-      if (userLevel < 2 && req.body.repositoryUrl) { // 会员级别以下不能设置源码链接
-        res.status(403).json({ error: '只有会员级别及以上用户才能设置源码仓库链接' });
-        return;
-      }
+    // 检查用户是否存在
+    const user = await User.findByPk(req.user!.userId);
+    if (!user) {
+      res.status(404).json({ error: '用户不存在' });
+      return;
     }
 
     const files = req.files as { [fieldname: string]: Express.Multer.File[] };
@@ -465,15 +445,39 @@ router.post('/:id/vote', auth, checkMembershipPermission('canVote'), async (req:
       return;
     }
 
-    // 检查用户是否已经投过票
+    // 检查用户是否存在
     const user = await User.findByPk(req.user!.userId);
     if (!user) {
       res.status(404).json({ error: '用户不存在' });
       return;
     }
 
-    // 这里简化处理，实际应该有投票记录表
-    // 暂时允许重复投票，每次投票+1
+    // 检查是否是自己的作品
+    if (work.author === user.id) {
+      res.status(400).json({ error: '不能给自己的作品投票' });
+      return;
+    }
+
+    // 检查是否已经投过票
+    const existingVote = await Vote.findOne({
+      where: {
+        userId: user.id,
+        workId: work.id
+      }
+    });
+
+    if (existingVote) {
+      res.status(400).json({ error: '您已经为该作品投过票了' });
+      return;
+    }
+
+    // 创建投票记录
+    await Vote.create({
+      userId: user.id,
+      workId: work.id
+    });
+
+    // 更新作品票数
     await work.update({ votes: work.votes + 1 });
 
     res.json({ message: '投票成功', votes: work.votes + 1 });

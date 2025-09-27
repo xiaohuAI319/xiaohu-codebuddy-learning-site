@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 import { StarIcon, EyeIcon, LockClosedIcon, FolderIcon } from '@heroicons/react/24/outline';
 import { StarIcon as StarSolidIcon } from '@heroicons/react/24/solid';
 import MembershipBadge from '../components/MembershipBadge';
@@ -41,15 +42,16 @@ interface User {
 const WorksPage: React.FC = () => {
   const { category } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [selectedCategory, setSelectedCategory] = useState(category || 'all');
   const [sortBy, setSortBy] = useState('votes');
   const [works, setWorks] = useState<Work[]>([]);
-  const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [upgradePrompt, setUpgradePrompt] = useState<{
     show: boolean;
     requiredLevel: string;
     feature: string;
+    showLoginButton?: boolean;
   }>({ show: false, requiredLevel: '', feature: '' });
 
   const categories = [
@@ -149,37 +151,16 @@ const WorksPage: React.FC = () => {
     }
   }, [selectedCategory, sortBy, user]);
 
-  const fetchUserInfo = useCallback(async () => {
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) return;
-
-      const response = await fetch('/api/auth/me', {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
-      const data = await response.json();
-      if (data.success) {
-        setUser(data.data);
-      }
-    } catch (error) {
-      console.error('获取用户信息失败:', error);
-    }
-  }, []);
-  
+    
   useEffect(() => {
     fetchWorks();
   }, [fetchWorks]);
 
-  useEffect(() => {
-    fetchUserInfo();
-  }, [fetchUserInfo]);
-
+  
   const canUserAccessWork = (work: Work): boolean => {
     if (!user) return work.visibility === 'public';
     if (user.role === 'admin') return true;
-    if (work.author.nickname === user.id) return true;
+    if (work.author.nickname === user.nickname) return true;
 
     const levelHierarchy = ['学员', '会员', '高级会员', '共创', '讲师'];
     const requiredIndex = levelHierarchy.indexOf(work.requiredLevel);
@@ -191,31 +172,38 @@ const WorksPage: React.FC = () => {
   const canUserAccessContent = (work: Work, contentLevel: string): boolean => {
     if (!user) return contentLevel === 'preview';
     if (user.role === 'admin') return true;
-    if (work.author.nickname === user.id) return true;
+    if (work.author.nickname === user.nickname) return true;
 
-    const contentLevels = ['preview', 'basic', 'advanced', 'premium', 'sourceCode'];
+    const contentLevels = ['preview', 'prompt', 'sourceCode'];
     const contentIndex = contentLevels.indexOf(contentLevel);
 
     switch (user.currentLevel) {
-      case '学员':
-        return contentIndex <= 1; // preview + basic
-      case '会员':
-        return contentIndex <= 2; // preview + basic + advanced
-      case '高级会员':
-        return contentIndex <= 3; // preview + basic + advanced + premium
-      case '共创':
-      case '讲师':
-        return true; // 所有内容包括源码
-      default:
-        return contentIndex === 0; // 只能看预览
+      case '用户': return contentIndex <= 0; // 只能看预览，提示词和源码需要升级
+      case '学员': return contentIndex <= 1; // 可以看预览和提示词，源码需要升级
+      case '高级学员': return true; // 可以看所有内容
+      case '讲师': return true; // 可以看所有内容
+      case '管理员': return true; // 可以看所有内容
+      default: return contentIndex === 0; // 默认只能看预览
     }
   };
 
+  const handleLoginRedirect = () => {
+    navigate('/login');
+  };
+
   const handleVote = async (workId: string) => {
+    console.log('列表页投票点击 - 用户信息:', user);
     if (!user) {
+      setUpgradePrompt({ show: true, requiredLevel: '', feature: '请先登录后再投票', showLoginButton: true });
+      return;
+    }
+
+    // 检查用户权限：只有用户级别及以上才能投票
+    const canVoteLevels = ['用户', '学员', '高级学员', '讲师', '管理员'];
+    if (!canVoteLevels.includes(user.currentLevel)) {
       setUpgradePrompt({
         show: true,
-        requiredLevel: '学员',
+        requiredLevel: '用户',
         feature: '投票功能'
       });
       return;
@@ -232,6 +220,13 @@ const WorksPage: React.FC = () => {
 
       if (response.ok) {
         fetchWorks(); // 重新获取作品列表
+      } else if (response.status === 403) {
+        // 后端权限检查失败，显示升级提示
+        setUpgradePrompt({
+          show: true,
+          requiredLevel: '用户',
+          feature: '投票功能'
+        });
       }
     } catch (error) {
       console.error('投票失败:', error);
@@ -243,16 +238,14 @@ const WorksPage: React.FC = () => {
   const handleViewContent = (work: Work, contentLevel: string) => {
     if (!canUserAccessContent(work, contentLevel)) {
       const requiredLevels = {
-        basic: '学员',
-        advanced: '会员',
-        premium: '高级会员',
-        sourceCode: '共创'
+        prompt: '学员',
+        sourceCode: '高级学员'
       };
-      
+
       setUpgradePrompt({
         show: true,
-        requiredLevel: requiredLevels[contentLevel as keyof typeof requiredLevels] || '会员',
-        feature: `查看${contentLevel === 'sourceCode' ? '源码' : '完整内容'}`
+        requiredLevel: requiredLevels[contentLevel as keyof typeof requiredLevels] || '学员',
+        feature: `查看${contentLevel === 'sourceCode' ? '源码' : '提示词'}`
       });
       return;
     }
@@ -293,11 +286,6 @@ const WorksPage: React.FC = () => {
       <div>
         <h1 className="text-3xl font-bold text-gray-900 mb-2">作品集</h1>
         <p className="text-gray-600">展示学员们的优秀AI编程作品</p>
-        {user && (
-          <div className="mt-2">
-            <MembershipBadge level={user.currentLevel} />
-          </div>
-        )}
       </div>
 
       {/* 分类标签 */}
@@ -388,64 +376,21 @@ const WorksPage: React.FC = () => {
                 ))}
               </div>
 
-              {/* 内容访问按钮 */}
-              <div className="flex gap-2 mb-3">
+              {/* 内容访问按钮和作者信息 */}
+              <div className="flex items-center justify-between">
                 <button
                   onClick={() => navigate(`/work/${work.slug || work.id}`)}
-                  className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700"
+                  className="px-4 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors duration-200 shadow-md hover:shadow-lg transform hover:-translate-y-0.5 text-sm"
                 >
                   查看详情
                 </button>
-                
-                {work.content.basic && (
-                  <button
-                    onClick={() => handleViewContent(work, 'basic')}
-                    className={`text-xs px-2 py-1 rounded ${
-                      canUserAccessContent(work, 'basic')
-                        ? 'bg-blue-100 text-blue-800 hover:bg-blue-200'
-                        : 'bg-gray-100 text-gray-500 cursor-not-allowed'
-                    }`}
-                    disabled={!canUserAccessContent(work, 'basic')}
-                  >
-                    基础内容
-                    {!canUserAccessContent(work, 'basic') && <LockClosedIcon className="w-3 h-3 inline ml-1" />}
-                  </button>
-                )}
 
-                {work.content.sourceCode && (
-                  <button
-                    onClick={() => handleViewContent(work, 'sourceCode')}
-                    className={`text-xs px-2 py-1 rounded ${
-                      canUserAccessContent(work, 'sourceCode')
-                        ? 'bg-purple-100 text-purple-800 hover:bg-purple-200'
-                        : 'bg-gray-100 text-gray-500 cursor-not-allowed'
-                    }`}
-                    disabled={!canUserAccessContent(work, 'sourceCode')}
-                  >
-                    源码
-                    {!canUserAccessContent(work, 'sourceCode') && <LockClosedIcon className="w-3 h-3 inline ml-1" />}
-                  </button>
-                )}
-              </div>
-              
-              <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
                   <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
                     <span className="text-xs text-blue-600">{work.author.nickname[0]}</span>
                   </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">{work.author.nickname}</p>
-                    <MembershipBadge level={work.author.currentLevel} size="sm" />
-                  </div>
+                  <p className="text-sm font-medium text-gray-900">{work.author.nickname}</p>
                 </div>
-                
-                <button 
-                  onClick={() => handleVote(work.id)}
-                  className="flex items-center space-x-1 text-blue-600 hover:text-blue-700"
-                >
-                  <StarSolidIcon className="w-4 h-4" />
-                  <span className="text-sm">投票</span>
-                </button>
               </div>
             </div>
           </div>
@@ -469,6 +414,8 @@ const WorksPage: React.FC = () => {
           currentLevel={user?.currentLevel || '游客'}
           requiredLevel={upgradePrompt.requiredLevel}
           feature={upgradePrompt.feature}
+          showLoginButton={upgradePrompt.showLoginButton}
+          onLogin={upgradePrompt.showLoginButton ? handleLoginRedirect : undefined}
           onClose={() => setUpgradePrompt({ show: false, requiredLevel: '', feature: '' })}
         />
       )}
